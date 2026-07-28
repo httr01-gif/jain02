@@ -69,8 +69,11 @@ async function askJSON(prompt, step){
     if(!t) continue;
     try{ return JSON.parse(t); }catch(_){ }
   }
-  const cut = j.stop === 'max_tokens' ? ' (응답이 길이 제한에 걸렸습니다)' : '';
-  throw new Error(`[${step}] 응답을 해석하지 못했습니다${cut}`);
+  /* 여기까지 왔으면 원인을 눈으로 봐야 한다. 원문을 남기고 앞부분을 보여준다. */
+  window.__LASTRAW__ = txt;
+  const head = txt.replace(/\s+/g, ' ').slice(0, 160);
+  const cut  = j.stop === 'max_tokens' ? ' 길이제한' : '';
+  throw new Error(`[${step}]${cut} 해석 실패 · 응답 앞부분 → ${head}`);
 }
 
 /* 문자열 안에 들어간 진짜 줄바꿈·탭을 \\n \\t 로 바꾼다.
@@ -159,7 +162,7 @@ const RULE = `
 
 출력 규칙: JSON 객체 하나만 출력한다. 설명·머리말·마크다운 코드펜스를 붙이지 않는다.
 특수교육대상학생을 존중하는 표현을 쓰고, 결핍보다 참여 방식과 지원 조건을 중심으로 쓴다.
-입력되지 않아 추정이 필요한 항목은 값 끝에 "(교사 검토 필요)"를 붙인다.`;
+괄호는 절대 쓰지 않는다. ( ) 「 」 [ ] 모두 금지이며 "교사 검토 필요" 같은 덧붙임 표시도 넣지 않는다.`;
 
 /* ── 4. 3분할 프롬프트 ─────────────────────────────────── */
 const P1 = c => `${c}
