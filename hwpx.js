@@ -110,6 +110,41 @@ function fitStudentRows(tbl, n){
   tbl.setAttribute('rowCnt', String(n+2));
 }
 
+/* 과정안 표의 전개 활동 수를 n 개로 맞춘다.
+   한 활동 = 2행(공통 교수활동 + 수준별). 전개 셀의 세로 병합과 rowCnt 도 함께 고친다. */
+function fitDevelopRows(tbl, n){
+  const rows = () => Array.from(tbl.getElementsByTagNameNS(HP,'tr')).filter(x=>x.parentNode===tbl);
+  const addr = tc => tc.getElementsByTagNameNS(HP,'cellAddr')[0];
+  const span = tc => tc.getElementsByTagNameNS(HP,'cellSpan')[0];
+  const cells = tr => Array.from(tr.getElementsByTagNameNS(HP,'tc')).filter(x=>x.parentNode===tr);
+
+  let r = rows();
+  const head = r.slice(0,2), intro = r[2], close = r[r.length-1];
+  let blocks = [];
+  for(let i=3; i<r.length-1; i+=2) blocks.push([r[i], r[i+1]]);
+
+  n = Math.max(1, Math.min(6, n));
+  if(n > blocks.length){
+    const [pa, pb] = blocks[blocks.length-1];
+    for(let k=blocks.length; k<n; k++){
+      const a = pa.cloneNode(true), b = pb.cloneNode(true);
+      cells(a).forEach(tc => { if(addr(tc).getAttribute('colAddr') === '0') a.removeChild(tc); });
+      blocks.push([a, b]);
+    }
+  } else if(n < blocks.length){
+    blocks = blocks.slice(0, n);
+  }
+
+  rows().forEach(tr => tbl.removeChild(tr));
+  [...head, intro, ...blocks.flat(), close].forEach(tr => tbl.appendChild(tr));
+
+  rows().forEach((tr, i) => cells(tr).forEach(tc => addr(tc).setAttribute('rowAddr', String(i))));
+  cells(rows()[3]).forEach(tc => {
+    if(addr(tc).getAttribute('colAddr') === '0') span(tc).setAttribute('rowSpan', String(2*n));
+  });
+  tbl.setAttribute('rowCnt', String(4 + 2*n));
+}
+
 /* ── 본 작업 ───────────────────────────────────────────── */
 async function exportHwpx(){
   const DOC = window.__DOC__;
@@ -202,17 +237,25 @@ function writeAll(doc, {a, b, e, d, tools}){
            + (d.customAiTool ? '  ('+d.customAiTool+')' : ''));
   S(4,2,1, a.aiPlan || '');
 
-  /* 5. 교수·학습 과정안 */
-  const dev = (b.develop || []).slice(0,2);
-  while(dev.length < 2) dev.push({});
+  /* 5. 교수·학습 과정안 — 활동 수에 맞춰 표를 늘린 뒤 채운다 */
+  const dev = (b.develop || []).filter(x => x && (x.teacher || x.process || x.levelA));
+  if(!dev.length) dev.push({});
+  fitDevelopRows(T[5], dev.length);
+  T = tblsOf(doc);
   const io_ = b.intro || {}, cl = b.close || {};
 
   S(5,2,1, io_.process || '');  S(5,2,2, io_.teacher || '');  S(5,2,5, io_.material || '');
-  S(5,3,1, dev[0].process || ''); S(5,3,2, dev[0].teacher || ''); S(5,3,5, dev[0].material || '');
-  S(5,4,2, dev[0].levelA || '');  S(5,4,3, dev[0].levelB || ''); S(5,4,4, dev[0].levelC || '');
-  S(5,5,1, dev[1].process || ''); S(5,5,2, dev[1].teacher || ''); S(5,5,5, dev[1].material || '');
-  S(5,6,2, dev[1].levelA || '');  S(5,6,3, dev[1].levelB || ''); S(5,6,4, dev[1].levelC || '');
-  S(5,7,1, cl.process || '');   S(5,7,2, cl.teacher || '');   S(5,7,5, cl.material || '');
+  dev.forEach((x, i) => {
+    const r = 3 + 2*i;
+    S(5, r,   1, x.process  || '');
+    S(5, r,   2, x.teacher  || '');
+    S(5, r,   5, x.material || '');
+    S(5, r+1, 2, x.levelA   || '');
+    S(5, r+1, 3, x.levelB   || '');
+    S(5, r+1, 4, x.levelC   || '');
+  });
+  const rc = 3 + 2*dev.length;
+  S(5,rc,1, cl.process || '');  S(5,rc,2, cl.teacher || '');  S(5,rc,5, cl.material || '');
 
   /* 6. 평가 계획 */
   (e.evaluation || []).slice(0,3).forEach((x, i) => {
