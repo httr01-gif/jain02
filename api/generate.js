@@ -16,7 +16,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const { prompt } = req.body || {};
+    const { prompt, json } = req.body || {};
     if (!prompt || typeof prompt !== 'string') {
       return res.status(400).json({ error: 'prompt가 비어 있습니다.' });
     }
@@ -30,8 +30,11 @@ module.exports = async (req, res) => {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 4000,          // 본인 키이므로 넉넉히 잡습니다
-        messages: [{ role: 'user', content: prompt }]
+        max_tokens: 8000,          // 한국어는 토큰을 많이 먹어 넉넉히 잡습니다
+        messages: json
+          ? [{ role: 'user', content: prompt },
+             { role: 'assistant', content: '{' }]   // 여는 중괄호를 미리 넣어 군더더기 차단
+          : [{ role: 'user', content: prompt }]
       })
     });
 
@@ -46,7 +49,9 @@ module.exports = async (req, res) => {
       .map(c => c.text)
       .join('');
 
-    return res.status(200).json({ text });
+    // prefill 을 썼으면 잘라먹은 '{' 를 다시 붙여 돌려준다
+    return res.status(200).json({ text: json ? '{' + text : text,
+                                  stop: data.stop_reason });
   } catch (err) {
     return res.status(500).json({ error: '서버 오류', detail: String(err && err.message) });
   }
