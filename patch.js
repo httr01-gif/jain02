@@ -57,16 +57,41 @@ async function askJSON(prompt, step){
   if(s0 < 0) throw new Error(`[${step}] JSON 형식이 아닌 응답`);
 
   const body = txt.slice(s0, e0 >= s0 ? e0+1 : undefined);
-  try{ return JSON.parse(body); }
-  catch(_){ }
 
-  /* 잘린 응답 복구 — 마지막으로 온전한 지점까지만 살려서 닫는다 */
-  const fixed = repairJSON(txt.slice(s0));
-  if(fixed){
-    try{ return JSON.parse(fixed); }catch(_){ }
+  /* ① 그대로  ② 줄바꿈 정리  ③ 잘린 것 복구  ④ 둘 다 */
+  const tries = [
+    body,
+    escapeRawBreaks(body),
+    repairJSON(txt.slice(s0)),
+    repairJSON(escapeRawBreaks(txt.slice(s0)))
+  ];
+  for(const t of tries){
+    if(!t) continue;
+    try{ return JSON.parse(t); }catch(_){ }
   }
   const cut = j.stop === 'max_tokens' ? ' (응답이 길이 제한에 걸렸습니다)' : '';
   throw new Error(`[${step}] 응답을 해석하지 못했습니다${cut}`);
+}
+
+/* 문자열 안에 들어간 진짜 줄바꿈·탭을 \\n \\t 로 바꾼다.
+   모델이 여러 줄 내용을 넣을 때 가장 흔히 깨지는 지점이다. */
+function escapeRawBreaks(t){
+  let out = '', inStr = false, esc = false;
+  for(let i=0; i<t.length; i++){
+    const ch = t[i];
+    if(inStr){
+      if(esc){ out += ch; esc = false; continue; }
+      if(ch === '\\'){ out += ch; esc = true; continue; }
+      if(ch === '"'){ inStr = false; out += ch; continue; }
+      if(ch === '\n'){ out += '\\n'; continue; }
+      if(ch === '\r'){ continue; }
+      if(ch === '\t'){ out += '\\t'; continue; }
+      out += ch; continue;
+    }
+    if(ch === '"'){ inStr = true; }
+    out += ch;
+  }
+  return out;
 }
 
 /* 문자열·배열·객체가 열린 채로 끝난 JSON 을 닫아 준다 */
