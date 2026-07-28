@@ -10,28 +10,32 @@
 (function(){
 
 /* ── 라벨 정의 : [[라벨]] → 들어갈 자리 ───────────────── */
-const SLOTS = [
-  ['수업설계의도',  'a.intent'],
-  ['AI활용구상',    'a.aiPlan'],
-  ['도입-과정',     'b.intro.process'],
-  ['도입-교사',     'b.intro.teacher'],
-  ['도입-자료',     'b.intro.material'],
-  ['전개1-과정',    'b.develop.0.process'],
-  ['전개1-교사',    'b.develop.0.teacher'],
-  ['전개1-가',      'b.develop.0.levelA'],
-  ['전개1-나',      'b.develop.0.levelB'],
-  ['전개1-다',      'b.develop.0.levelC'],
-  ['전개1-자료',    'b.develop.0.material'],
-  ['전개2-과정',    'b.develop.1.process'],
-  ['전개2-교사',    'b.develop.1.teacher'],
-  ['전개2-가',      'b.develop.1.levelA'],
-  ['전개2-나',      'b.develop.1.levelB'],
-  ['전개2-다',      'b.develop.1.levelC'],
-  ['전개2-자료',    'b.develop.1.material'],
-  ['정리-과정',     'b.close.process'],
-  ['정리-교사',     'b.close.teacher'],
-  ['정리-자료',     'b.close.material'],
-];
+function slots(n){
+  const list = [
+    ['수업설계의도', 'a.intent'],
+    ['AI활용구상',   'a.aiPlan'],
+    ['도입-과정',    'b.intro.process'],
+    ['도입-교사',    'b.intro.teacher'],
+    ['도입-자료',    'b.intro.material'],
+  ];
+  for(let i=0; i<n; i++){
+    const k = i+1;
+    list.push([`전개${k}-과정`, `b.develop.${i}.process`]);
+    list.push([`전개${k}-교사`, `b.develop.${i}.teacher`]);
+    list.push([`전개${k}-가`,   `b.develop.${i}.levelA`]);
+    list.push([`전개${k}-나`,   `b.develop.${i}.levelB`]);
+    list.push([`전개${k}-다`,   `b.develop.${i}.levelC`]);
+    list.push([`전개${k}-자료`, `b.develop.${i}.material`]);
+  }
+  list.push(['정리-과정', 'b.close.process']);
+  list.push(['정리-교사', 'b.close.teacher']);
+  list.push(['정리-자료', 'b.close.material']);
+  return list;
+}
+const devCount = () => {
+  const el = document.getElementById('devCount');
+  return el ? (parseInt(el.value,10) || 2) : 2;
+};
 const EVAL = [['지식이해','지식·이해'],['과정기능','과정·기능'],['가치태도','가치·태도']];
 
 /* ── 프롬프트 생성 ─────────────────────────────────────── */
@@ -87,33 +91,22 @@ ${getTypeExtra(d.lessonType)}
 설명이나 머리말 없이 첫 줄부터 [[수업설계의도]] 로 시작하세요.
 
 작성 규칙
-· 교사 칸(-교사)은 "▣"로 활동을 묶고 그 아래 " - "로 세부 항목. 모든 항목을 "~하기" 로 끝냅니다.
-· 학생 칸(-가 / -나 / -다)은 관찰 가능한 수행 행동만. 모든 문장을 "~한다." 로 끝냅니다.
-  가·나·다의 차이가 촉진 위계(독립 수행 → 언어·시각 촉진 → 신체 촉진)로 드러나게 합니다.
-· 자료 칸(-자료)은 자료를 ◉, 유의점을 ※ 로 시작. 안전 유의점을 하나 넣습니다.
-· 과정 칸(-과정)은 짧은 낱말을 줄바꿈으로 나열합니다.
+· 괄호를 절대 쓰지 않습니다. ( ) 「 」 [ ] 모두 금지입니다.
+  "교사 검토 필요", "해당 없음" 같은 덧붙임 표시도 넣지 않습니다.
+  보충 설명이 필요하면 쉼표로 잇거나 문장을 나눕니다.
+· 교사 칸은 "▣"로 활동을 묶고 그 아래 " - "로 세부 항목. 모든 항목을 "~하기" 로 끝냅니다.
+· 학생 칸은 모든 줄을 "- " 로 시작합니다. 관찰 가능한 수행 행동만 쓰고 "~한다." 로 끝냅니다.
+  한 칸에 2줄, 가·나·다의 차이가 촉진 위계인 독립 수행, 언어·시각 촉진, 신체 촉진으로 드러나게 합니다.
+· 자료 칸은 매우 짧게 씁니다. 칸이 좁아 분량이 넘치면 표가 밀립니다.
+  ◉ 로 시작하는 자료 2줄, ※ 로 시작하는 유의점 2줄, 모두 합해 4줄을 넘기지 않습니다.
+  각 줄은 20자 안팎의 명사구로 끝냅니다. 문장으로 풀어 쓰지 않습니다.
+  ※ 중 하나는 안전에 관한 것으로 합니다.
+  보기 - ◉ 드립백 필터, 원두 ◉ 순서 그림카드 ※ 뜨거운 물 취급 주의 ※ 촉진은 점차 줄이기
+· 전개 활동은 정확히 ${devCount()}개입니다. 라벨에 있는 만큼만 쓰고 임의로 늘리거나 줄이지 않습니다.
+· 과정 칸은 짧은 낱말을 줄바꿈으로 나열합니다.
 · 평가의 잘함·보통·노력요함은 촉진 횟수나 수행 단계 수로 구분되는 문장으로 씁니다.
 
-[[수업설계의도]]
-[[AI활용구상]]
-[[도입-과정]]
-[[도입-교사]]
-[[도입-자료]]
-[[전개1-과정]]
-[[전개1-교사]]
-[[전개1-가]]
-[[전개1-나]]
-[[전개1-다]]
-[[전개1-자료]]
-[[전개2-과정]]
-[[전개2-교사]]
-[[전개2-가]]
-[[전개2-나]]
-[[전개2-다]]
-[[전개2-자료]]
-[[정리-과정]]
-[[정리-교사]]
-[[정리-자료]]
+${slots(devCount()).map(([l]) => `[[${l}]]`).join('\n')}
 ${stuLabels}
 ${evalLabels}`;
 }
@@ -150,9 +143,18 @@ function buildDoc(text){
 
   const d = data();
   const tools = [...d.aiTools]; if(d.customAiTool) tools.push(d.customAiTool);
-  const doc = { a:{}, b:{ intro:{}, close:{}, develop:[{},{}] }, e:{ students:[], evaluation:[], reflection:[] }, d, tools };
+  /* 붙여넣은 라벨에서 전개 활동 수를 직접 읽는다 */
+  let n = 0;
+  Object.keys(map).forEach(k => {
+    const m = k.match(/^전개(\d+)-/);
+    if(m) n = Math.max(n, parseInt(m[1],10));
+  });
+  if(!n) n = devCount();
 
-  SLOTS.forEach(([label, path]) => {
+  const doc = { a:{}, b:{ intro:{}, close:{}, develop:[] }, e:{ students:[], evaluation:[], reflection:[] }, d, tools };
+  for(let i=0;i<n;i++) doc.b.develop.push({});
+
+  slots(n).forEach(([label, path]) => {
     if(map[label] != null) setPath(doc, path, map[label]);
   });
 
@@ -176,8 +178,8 @@ function buildDoc(text){
     });
   });
 
-  const missing = SLOTS.filter(([l]) => !map[l]).map(([l]) => l);
-  return { doc, missing };
+  const missing = slots(n).filter(([l]) => !map[l]).map(([l]) => l);
+  return { doc, missing, n };
 }
 
 /* ── 화면 ──────────────────────────────────────────────── */
@@ -213,6 +215,10 @@ function openPanel(){
       라벨 <code>[[ ]]</code> 은 지우지 마세요. 내용은 마음껏 고치셔도 됩니다.
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <label style="align-self:center;font-size:12.5px;color:#556070">전개 활동
+        <select id="devCount" style="margin-left:5px;padding:6px 8px;border:1.5px solid #d0dae8;border-radius:7px">
+          <option>2</option><option>3</option><option>4</option>
+        </select> 개</label>
       <button class="btn btn-secondary" id="btnCopyPastePrompt">📋 프롬프트 복사</button>
       <button class="btn" id="btnMakeHwpx"
         style="background:#5b4b8a;color:#fff;border:0;font-weight:800">⬇ 한글파일 만들기</button>
@@ -235,12 +241,12 @@ function openPanel(){
     const raw = document.getElementById('pasteArea').value.trim();
     if(!raw){ msg('붙여넣은 내용이 없습니다.'); return; }
     try{
-      const { doc, missing } = buildDoc(raw);
+      const { doc, missing, n } = buildDoc(raw);
       window.__DOC__ = doc;
       if(typeof renderDoc === 'function'){ try{ renderDoc(doc); }catch(_){ } }
       if(typeof window.exportHwpx === 'function'){
         window.exportHwpx();
-        msg(missing.length ? `변환했습니다. 다만 비어 있는 칸: ${missing.join(', ')}` : '변환했습니다.');
+        msg(`전개 활동 ${n}개로 변환했습니다.` + (missing.length ? ` 비어 있는 칸: ${missing.join(', ')}` : ''));
       } else {
         msg('hwpx.js 가 로드되지 않았습니다. 스크립트 순서를 확인해 주세요.');
       }
