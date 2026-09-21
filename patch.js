@@ -1,6 +1,8 @@
 /* ═══════════════════════════════════════════════════════════
-   공개수업 지도안 프롬프트 생성기 v3.3 패치
+   공개수업 지도안 프롬프트 생성기 v3.4 패치
    ───────────────────────────────────────────────────────────
+   v3.4 변경  학생 특성은 AI가 수업 관련 핵심만 추출, IEP 목표는 입력값 유지,
+              AI 활용 개별 지원 방안 구체화, 칸 줄 간격 오류 수정
    v3.3 변경  핵심역량 체크박스 탭 정렬, 학생별 지원과 자료 유형 2줄 이내,
               학생 수행 줄마다 "- ", 유의점은 전개 활동당 1개 20자 이내,
               표 머리 "본 차시 AI 활용 개별적 지원 방안", "생성형 AI 활용 자료 개발 유형"
@@ -234,15 +236,18 @@ const P2B = c => `${c}
 
 const P3 = c => `${c}
 
-(1) 학생별 "본 차시 AI 활용 개별적 지원 방안"과 "생성형 AI 활용 자료 개발 유형"을 학생 특성·IEP 목표에 맞춰 작성.
-    support: AI로 제작한 자료로 이 학생을 어떻게 지원하는지 핵심만 1~2줄. 줄마다 "- "로 시작, 30자 이내, 명사형으로 끝낸다.
+(1) 학생별 "학생 특성", "본 차시 AI 활용 개별적 지원 방안", "생성형 AI 활용 자료 개발 유형"을 작성.
+    char: 교사가 입력한 학생 특성을 그대로 옮기지 말고 분석하여, 이 수업의 활동과 목표에 직접 관련된 핵심 특성만 1~2줄.
+          줄마다 "- "로 시작, 35자 이내, 명사형으로 끝낸다. 수업과 관계없는 특성은 뺀다. IEP 목표는 쓰지 않는다.
+    support: 어느 활동에서 어떤 AI 제작 자료를 어떻게 제시하고 어떤 촉구로 수행을 돕는지 구체적으로 1~2줄.
+          줄마다 "- "로 시작, 40~60자, 명사형으로 끝낸다. 예: "- 활동1에서 AI 제작 장면 카드를 2장으로 줄여 제시하고 손짓 촉구로 선택 지원"
     aiMaterial: 교사가 생성형 AI로 개발하는 자료 유형 1~2줄. 줄마다 "- "로 시작, 20자 이내 명사형. 예: "- 상황 그림 카드", "- 짧은 대화 영상"
     students 배열의 label 은 위 학생 정보의 라벨(A, B, C …)을 그대로 쓴다.
     AI 도구 이름은 쓰지 않는다.
 (2) 평가계획을 지식·이해 / 과정·기능 / 가치·태도 3영역으로 작성. high·mid·low 는 촉진 횟수나 수행 단계 수로 구분되는 관찰 가능한 문장.
 (3) 수업 나눔 질문 3개. 참관자가 협의회에서 논의할 만한 것으로.
 
-{"students":[{"label":"A","support":"...","aiMaterial":"..."}],
+{"students":[{"label":"A","char":"...","support":"...","aiMaterial":"..."}],
 "evaluation":[{"domain":"지식·이해","method":"관찰평가\\n수행평가","high":"...","mid":"...","low":"..."}],
 "reflection":["...","...","..."]}${RULE}`;
 
@@ -283,7 +288,7 @@ function dashLines(text){
 /* 학생별 지원·자료 유형: 핵심 2줄 이내, 줄마다 "- " */
 function tidyStudents(list){
   (list || []).forEach(x => {
-    ['support', 'aiMaterial'].forEach(k => {
+    ['char', 'support', 'aiMaterial'].forEach(k => {
       x[k] = String(x[k] || '').split('\n')
         .map(s => s.replace(/^\s*[-–—·•]\s*/, '').trim())
         .filter(Boolean).slice(0, 2)
@@ -413,7 +418,7 @@ function renderDoc({a, b, e, d, tools}){
   const sup = {}; (e.students||[]).forEach(s => sup[s.label] = s);
   const rows = (d.studentPlans||[]).map(p => {
     const x = sup[p.label] || {};
-    return `<tr>${lbl(p.label)}${td(fieldText(p.char))}${td(fieldText(p.goal))}${td(x.support||'')}${td(x.aiMaterial||'')}</tr>`;
+    return `<tr>${lbl(p.label)}${td(x.char || fieldText(p.char))}${td(fieldText(p.goal))}${td(x.support||'')}${td(x.aiMaterial||'')}</tr>`;
   }).join('') || `<tr><td colspan="5" style="border:${B};padding:14px;text-align:center;color:#888">학생 정보 미입력</td></tr>`;
 
   h += tbl(
