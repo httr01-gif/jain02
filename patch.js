@@ -1,13 +1,21 @@
 /* ═══════════════════════════════════════════════════════════
-   공개수업 지도안 프롬프트 생성기 v3.0 패치
+   공개수업 지도안 프롬프트 생성기 v3.2 패치
    ───────────────────────────────────────────────────────────
+   v3.2 변경  전개 구체화 — 활동마다 교수 단계 3개(제시·시범 → 수행 → 확인·피드백),
+              단계마다 교사 활동 1행 + 가·나·다 수준별 수행 1행
+   v3.1 변경
+   ① 자료·유의점 분량 축소  ◉ 3개 이내, ※ 1개 25자 이내 (프롬프트 + 후처리 이중 제한)
+   ② 생성형 AI 활용 단계 표시  ▣ 제목 끝 [AI] → 미리보기 초록 배지, 한글 파일 초록 도형
+   ③ 탑재용 과정안 66편 공통점 반영
+      도입 ▣ 4개 고정, 수준별 학습목표, 【활동n】 목록, 큰따옴표 발문,
+      촉구 위계 표기, 본문 도구명 제외
    사용법: 기존 생성기 HTML의 </body> 바로 앞에
            <script> … 이 파일 내용 … </script> 를 붙여넣으세요.
-   기존 코드는 한 줄도 지우지 않습니다. 버튼 2개만 추가됩니다.
    ═══════════════════════════════════════════════════════════ */
 (function(){
 
 const MODEL = "claude-sonnet-4-6";
+const AI_MARK = "[AI]";
 
 /* ── 1. 버튼 주입 (HTML 수정 불필요) ───────────────────── */
 document.addEventListener('DOMContentLoaded', injectButtons);
@@ -33,11 +41,7 @@ function injectButtons(){
   bar.insertBefore(hwp, bar.children[1]);
 }
 
-/* ── 2. 생성 요청 (JSON만 수신) ─────────────────────────
-   배포용: 자기 서버(/api/generate)를 거쳐 키를 숨깁니다.
-   ※ 클로드 대화창 안에서 시험할 때만 아래 ENDPOINT 를
-     "https://api.anthropic.com/v1/messages" 로 바꾸고
-     body 를 {model, max_tokens, messages} 형태로 두세요.        */
+/* ── 2. 생성 요청 (JSON만 수신) ───────────────────────── */
 const ENDPOINT = "/api/generate";
 
 async function askJSON(prompt, step){
@@ -57,8 +61,6 @@ async function askJSON(prompt, step){
   if(s0 < 0) throw new Error(`[${step}] JSON 형식이 아닌 응답`);
 
   const body = txt.slice(s0, e0 >= s0 ? e0+1 : undefined);
-
-  /* ① 그대로  ② 줄바꿈 정리  ③ 잘린 것 복구  ④ 둘 다 */
   const tries = [
     body,
     escapeRawBreaks(body),
@@ -69,15 +71,12 @@ async function askJSON(prompt, step){
     if(!t) continue;
     try{ return JSON.parse(t); }catch(_){ }
   }
-  /* 여기까지 왔으면 원인을 눈으로 봐야 한다. 원문을 남기고 앞부분을 보여준다. */
   window.__LASTRAW__ = txt;
   const head = txt.replace(/\s+/g, ' ').slice(0, 160);
   const cut  = j.stop === 'max_tokens' ? ' 길이제한' : '';
   throw new Error(`[${step}]${cut} 해석 실패 · 응답 앞부분 → ${head}`);
 }
 
-/* 문자열 안에 들어간 진짜 줄바꿈·탭을 \\n \\t 로 바꾼다.
-   모델이 여러 줄 내용을 넣을 때 가장 흔히 깨지는 지점이다. */
 function escapeRawBreaks(t){
   let out = '', inStr = false, esc = false;
   for(let i=0; i<t.length; i++){
@@ -97,7 +96,6 @@ function escapeRawBreaks(t){
   return out;
 }
 
-/* 문자열·배열·객체가 열린 채로 끝난 JSON 을 닫아 준다 */
 function repairJSON(t){
   const stack = []; let inStr = false, esc = false, lastSafe = -1;
   for(let i=0; i<t.length; i++){
@@ -114,13 +112,13 @@ function repairJSON(t){
     else if(ch === ',' && stack.length){ lastSafe = i; }
   }
   if(!stack.length) return null;
-  let head = inStr && lastSafe > 0 ? t.slice(0, lastSafe) : t;   // 문자열 도중이면 직전 항목까지
+  let head = inStr && lastSafe > 0 ? t.slice(0, lastSafe) : t;
   if(inStr && lastSafe <= 0) return null;
   head = head.replace(/[,\s]+$/, '');
   return head + stack.reverse().join('');
 }
 
-/* ── 3. 공통 컨텍스트 (기존 함수 그대로 재사용) ─────────── */
+/* ── 3. 공통 컨텍스트 ─────────────────────────────────── */
 function baseCtx(){
   const d = data();
   const tools = [...d.aiTools];
@@ -162,7 +160,21 @@ const RULE = `
 
 출력 규칙: JSON 객체 하나만 출력한다. 설명·머리말·마크다운 코드펜스를 붙이지 않는다.
 특수교육대상학생을 존중하는 표현을 쓰고, 결핍보다 참여 방식과 지원 조건을 중심으로 쓴다.
-괄호는 절대 쓰지 않는다. ( ) 「 」 [ ] 모두 금지이며 "교사 검토 필요" 같은 덧붙임 표시도 넣지 않는다.`;
+괄호는 쓰지 않는다. ( ) 「 」 [ ] 모두 금지이며 "교사 검토 필요" 같은 덧붙임 표시도 넣지 않는다.
+단, 생성형 AI 표시 [AI] 와 활동 목록 표기 【활동1】 두 가지만 예외로 허용한다.`;
+
+/* 과정안 본문 공통 규칙 (v3.1) */
+const PLAN_RULE = `
+
+생성형 AI 표시 규칙:
+- 교사가 생성형 AI로 제작한 자료를 쓰는 ▣ 제목 줄의 맨 끝에만 [AI] 를 붙인다. 예: "▣ 동기 유발하기 [AI]"
+- 세부 항목 줄, 학생 활동 칸, 자료 칸에는 [AI] 를 쓰지 않는다.
+- 본문에 AI 도구 이름을 쓰지 않는다. "AI로 제작한 대화 카드"처럼만 쓴다.
+
+자료·유의점 칸 규칙:
+- 자료는 ◉ 로 시작하는 명사형 20자 이내. AI로 만든 자료는 앞에 "AI 제작"을 붙인다. 예: "◉ AI 제작 대화 장면 카드"
+- 유의점은 ※ 로 시작하는 한 줄, 25자 이내, 명사형으로 끝낸다. 예: "※ 음량과 재생 속도 사전 점검"
+- 유의점은 이 활동에서 가장 중요한 한 가지만 쓴다. 안전 위험이 있으면 안전을, 없으면 개별 지원을 쓴다.`;
 
 /* ── 4. 3분할 프롬프트 ─────────────────────────────────── */
 const P1 = c => `${c}
@@ -178,38 +190,106 @@ const P2A = c => `${c}
 
 교수·학습 과정안의 도입(5분)과 정리(5분)만 작성하라.
 
-칸 구분 규칙:
-- teacher(교사의 활동): 교사가 제시·발문·시범·촉진하는 내용. 모든 항목을 "~하기" 로 끝낸다. "▣"로 활동을 묶고 그 아래 " - "로 세부 항목.
-- material: 자료는 ◉, 유의점은 ※ 로 시작.
-- process(학습 과정)는 줄바꿈 \\n 으로 구분한다.
+intro.teacher 규칙:
+- ▣ 4개를 이 순서로 쓴다. ▣ 수업 준비하기 / ▣ 동기 유발하기 / ▣ 학습목표 확인하기 / ▣ 학습활동 안내하기
+- 수업 준비하기, 동기 유발하기 아래에는 " - "로 시작하는 세부 항목을 1~2줄, 줄마다 30자 이내로 쓰고 "~하기"로 끝낸다.
+- 동기 유발하기 세부 항목에 교사 발문을 큰따옴표로 1개 넣는다. 예: - "무슨 일이 생겼을까요?" 발문하기
+- 학습목표 확인하기 아래에는 수준별 목표 3줄을 " • 가 : ~할 수 있다." " • 나 : ~할 수 있다." " • 다 : ~할 수 있다." 형식으로 쓴다. 수준 차이는 촉구 정도로 구분한다.
+- 학습활동 안내하기 아래에는 아무것도 쓰지 않는다. 프로그램이 전개 활동 목록을 채운다.
+
+close.teacher 규칙:
+- ▣ 3개를 이 순서로 쓴다. ▣ 정리 및 평가하기 / ▣ 차시 예고하기 / ▣ 인사하기
+- 각 ▣ 아래 " - " 세부 항목 1~2줄, 줄마다 30자 이내, "~하기"로 끝낸다.
+
+material 규칙: intro 는 ◉ 3개 이내와 ※ 1개, close 는 ◉ 2개 이내와 ※ 1개.
+[AI] 는 도입에서 1개 이내, 정리에서는 AI 제작 자료를 실제로 쓸 때만 붙인다.
+process(학습 과정)는 줄바꿈 \\n 으로 구분한다.
 
 {"intro":{"process":"수업 준비\\n동기 유발\\n학습목표 확인\\n학습활동 안내","teacher":"...","material":"..."},
-"close":{"process":"정리 및 평가\\n차시 예고\\n인사·마무리","teacher":"...","material":"..."}}${RULE}`;
+"close":{"process":"정리 및 평가\\n차시 예고\\n인사·마무리","teacher":"...","material":"..."}}${PLAN_RULE}${RULE}`;
 
 const P2B = c => `${c}
 
-교수·학습 과정안의 전개(30분)만 작성하라. 활동은 정확히 2개.
+교수·학습 과정안의 전개(30분)만 작성하라. 전개는 과정안에서 가장 구체적인 부분이다. 활동은 정확히 2개.
 
-칸 구분 규칙(반드시 지킬 것):
-- teacher(교사의 활동): 교사가 제시·발문·시범·촉진하는 내용. 모든 항목을 "~하기" 로 끝낸다. "▣"로 묶고 그 아래 " - "로 세부 항목.
-- levelA / levelB / levelC(학생의 활동): 학생의 관찰 가능한 수행 행동만. 모든 문장을 "~한다." 로 끝낸다. 교사 행동을 여기 쓰지 않는다.
-- 가·나·다 수준의 차이가 촉진 위계(독립 수행 → 언어·시각 촉진 → 신체 촉진)로 분명히 드러나게 한다.
-- material: 자료는 ◉, 유의점은 ※ 로 시작. 안전 관련 유의점을 반드시 1개 포함.
-- 각 칸은 3줄을 넘기지 않도록 간결하게 쓴다.
+활동 구성 규칙(반드시 지킬 것):
+- process: "활동1 ▶ 활동 제목" 형식, 제목은 15자 이내.
+- steps: 활동마다 교수 단계 3개. 흐름은 ① 자료 제시와 시범 → ② 학생 수행 → ③ 확인과 피드백 순서로 짠다.
+- steps[].teacher(교사의 활동): 첫 줄은 "▣ 단계 제목하기", 그 아래 " - " 세부 항목 2~3줄.
+  세부 항목에는 무엇을 어떻게 제시하는지, 교사 발문, 촉구나 피드백 방법이 구체적으로 드러나야 한다.
+  발문은 큰따옴표로 쓴다. 모든 항목을 "~하기"로 끝낸다.
+  AI 제작 자료를 제시하는 단계의 ▣ 제목 끝에 [AI] 를 붙인다. 두 활동 중 적어도 1개 활동에는 [AI] 가 있어야 한다.
+- steps[].levelA / levelB / levelC(학생의 활동): 바로 위 교사 단계에 대응하는 학생 수행 1~2줄, 줄마다 "- "로 시작, 칸당 30~60자, "~한다."로 끝낸다.
+  무엇을, 어떤 방식으로, 얼마나 하는지 관찰 가능하게 쓴다. 예: 개수, 횟수, 반응 방식.
+  촉구 위계를 드러낸다. 가 "스스로", 나 "언어적 촉구를 받아", 다 "신체적 촉구를 받아" 또는 "그림 카드를 가리켜".
+  교사 행동을 여기 쓰지 않는다.
+- material: 활동 전체에 대해 ◉ 3개 이내와 ※ 정확히 1개. 자료 칸은 짧게 유지한다.
 
-{"develop":[{"process":"활동1 ...","teacher":"...","levelA":"...","levelB":"...","levelC":"...","material":"..."},
-{"process":"활동2 ...","teacher":"...","levelA":"...","levelB":"...","levelC":"...","material":"..."}]}${RULE}`;
+{"develop":[{"process":"활동1 ▶ ...","steps":[{"teacher":"▣ ...\\n - ...\\n - ...","levelA":"...","levelB":"...","levelC":"..."},{"teacher":"...","levelA":"...","levelB":"...","levelC":"..."},{"teacher":"...","levelA":"...","levelB":"...","levelC":"..."}],"material":"..."},
+{"process":"활동2 ▶ ...","steps":[...],"material":"..."}]}${PLAN_RULE}${RULE}`;
 
 const P3 = c => `${c}
 
 (1) 학생별 "본 차시 개별적 지원 방안"과 "생성형 AI 활용 자료 유형"을 학생 특성·IEP 목표에 맞춰 각각 2~3줄("-"로 시작)로 작성.
     students 배열의 label 은 위 학생 정보의 라벨(A, B, C …)을 그대로 쓴다.
+    본문에 AI 도구 이름을 반복하지 말고 "AI로 제작한 ○○"처럼 쓴다.
 (2) 평가계획을 지식·이해 / 과정·기능 / 가치·태도 3영역으로 작성. high·mid·low 는 촉진 횟수나 수행 단계 수로 구분되는 관찰 가능한 문장.
 (3) 수업 나눔 질문 3개. 참관자가 협의회에서 논의할 만한 것으로.
 
 {"students":[{"label":"A","support":"...","aiMaterial":"..."}],
 "evaluation":[{"domain":"지식·이해","method":"관찰평가\\n수행평가","high":"...","mid":"...","low":"..."}],
 "reflection":["...","...","..."]}${RULE}`;
+
+/* ── 4-1. 후처리 (v3.1) ───────────────────────────────── */
+/* 자료 칸: ◉·※ 개수 제한, 빈 줄 제거, 잘못 들어간 [AI] 제거 */
+function limitMaterial(text, maxMat, maxNote){
+  let m = 0, n = 0;
+  return String(text || '').split('\n')
+    .map(s => s.split(AI_MARK).join('').trim())
+    .filter(s => {
+      if(!s) return false;
+      if(s.startsWith('◉')) return ++m <= maxMat;
+      if(s.startsWith('※')) return ++n <= maxNote;
+      return false;
+    }).join('\n');
+}
+const noMark = s => String(s || '').split(AI_MARK).join('').trim();
+
+/* 학습활동 안내하기 아래를 전개 활동 제목으로 채운다 */
+function fillActList(intro, develop){
+  if(!intro || !intro.teacher) return;
+  const titles = (develop || []).map((x, i) => {
+    const t = String(x.process || '').replace(/^\s*활동\s*\d+\s*▶?\s*/, '').trim();
+    return t ? ` 【활동${i+1}】 ${t}` : '';
+  }).filter(Boolean);
+  const lines = intro.teacher.split('\n');
+  const k = lines.findIndex(s => /▣\s*학습\s*활동\s*안내/.test(s));
+  if(k < 0){ if(titles.length) intro.teacher += '\n\n▣ 학습활동 안내하기\n' + titles.join('\n'); return; }
+  let e = k + 1;
+  while(e < lines.length && !/^\s*▣/.test(lines[e])) e++;
+  intro.teacher = [...lines.slice(0, k+1), ...titles, ...lines.slice(e)].join('\n');
+}
+
+function tidy(b){
+  const io_ = b.intro || {}, cl = b.close || {};
+  io_.material = limitMaterial(io_.material, 3, 1);
+  cl.material  = limitMaterial(cl.material, 2, 1);
+  (b.develop || []).forEach(x => {
+    x.material = limitMaterial(x.material, 3, 1);
+    x.process = noMark(x.process);
+    /* 구형 응답(teacher·level 단일)도 steps 1개로 맞춘다 */
+    if(!Array.isArray(x.steps) || !x.steps.length)
+      x.steps = [{ teacher:x.teacher, levelA:x.levelA, levelB:x.levelB, levelC:x.levelC }];
+    x.steps = x.steps.filter(s => s && (s.teacher || s.levelA || s.levelB || s.levelC)).slice(0, 4);
+    if(!x.steps.length) x.steps = [{}];
+    x.steps.forEach(s => {
+      s.teacher = String(s.teacher || '');
+      s.levelA = noMark(s.levelA); s.levelB = noMark(s.levelB); s.levelC = noMark(s.levelC);
+    });
+  });
+  fillActList(io_, b.develop);
+  return b;
+}
 
 /* ── 5. 실행 ───────────────────────────────────────────── */
 let DOC = null;
@@ -231,11 +311,11 @@ async function generateDocument(){
     say('2/4 · 도입과 정리를 구성하고 있습니다');      const b1 = await askJSON(P2A(c.text), '도입·정리');
     say('3/4 · 전개 활동을 구성하고 있습니다');        const b2 = await askJSON(P2B(c.text), '전개');
     say('4/4 · 개별지원과 평가계획을 작성하고 있습니다'); const e  = await askJSON(P3(c.text),  '개별지원·평가');
-    const b = { intro: b1.intro, close: b1.close, develop: b2.develop || [] };
+    const b = tidy({ intro: b1.intro, close: b1.close, develop: b2.develop || [] });
     DOC = { a, b, e, d: c.d, tools: c.tools };
-    window.__DOC__ = DOC;          // hwpx 모듈이 읽어 간다
+    window.__DOC__ = DOC;
     renderDoc(DOC);
-    showToast('과정안이 생성되었습니다. 한글로 복사해 보세요.');
+    showToast('과정안이 생성되었습니다. 한글파일로 내려받아 보세요.');
   }catch(err){
     panel.innerHTML = `<div class="empty"><div class="big">⚠️</div><b>생성 실패: ${escapeHtml(err.message)}</b>
       <span>외부망이 차단된 환경일 수 있습니다. 이 경우 <b>📝 프롬프트</b> 탭의 기존 방식을 사용하세요.</span></div>`;
@@ -244,10 +324,13 @@ async function generateDocument(){
 }
 
 /* ── 6. 서식대로 렌더링 ────────────────────────────────── */
+const AI_BADGE = '<span style="display:inline-block;padding:0 6px;margin:0 2px;border-radius:8px;background:#9BE5C8;font-size:.82em;line-height:1.55;font-weight:700">생성형AI</span>';
+const withBadge = html => String(html).split(AI_MARK).join(AI_BADGE);
+
 function renderDoc({a, b, e, d, tools}){
   const B = '1px solid #000';
-  const td = (t, s='') => `<td style="border:${B};padding:5px 6px;vertical-align:top;white-space:pre-wrap;${s}">${escapeHtml(t||'')}</td>`;
-  const th = (t, s='', at='') => `<th${at} style="border:${B};background:#eef2f7;padding:6px;text-align:center;vertical-align:middle;font-weight:700;white-space:pre-wrap;${s}">${escapeHtml(t)}</th>`;
+  const td = (t, s='') => `<td style="border:${B};padding:5px 6px;vertical-align:top;white-space:pre-wrap;${s}">${withBadge(escapeHtml(t||''))}</td>`;
+  const th = (t, s='', at='') => `<th${at} style="border:${B};background:#eef2f7;padding:6px;text-align:center;vertical-align:middle;font-weight:700;white-space:pre-wrap;${s}">${withBadge(escapeHtml(t))}</th>`;
   const lbl = t => td(t, 'background:#f4f6f9;text-align:center;font-weight:700;vertical-align:middle');
   const tbl = r => `<table style="width:100%;border-collapse:collapse;font-size:11.5px;line-height:1.6;margin-bottom:10px;table-layout:fixed">${r}</table>`;
   const cap = (t, n) => `<tr><td colspan="${n}" style="border:${B};background:#e4e9f0;text-align:center;font-weight:800;letter-spacing:.25em;padding:6px">${escapeHtml(t)}</td></tr>`;
@@ -270,7 +353,6 @@ function renderDoc({a, b, e, d, tools}){
     생성형 AI 기반 「프로그램」 운영을 통한 맞춤형 특수교육 실천 역량 강화 방안 연구<br>
     ( ${escapeHtml(fieldText(d.subject))} )과 교수·학습 과정안</div>`;
 
-  /* 기본 정보 */
   h += tbl(
     `<colgroup><col width="11%"><col width="24%"><col width="10%"><col width="21%"><col width="13%"><col width="21%"></colgroup>` +
     `<tr>${lbl('일 시')}${td(fieldText(d.lessonDate),'text-align:center')}${lbl('대 상')}${td(fieldText(d.targetClass),'text-align:center')}${lbl('지도교사')}${td(d.teacherName)}</tr>` +
@@ -279,7 +361,6 @@ function renderDoc({a, b, e, d, tools}){
     `<tr>${lbl('학습목표')}<td colspan="5" style="border:${B};padding:5px 6px;white-space:pre-wrap">${escapeHtml(fieldText(d.lessonGoal))}</td></tr>`
   );
 
-  /* 성취기준 · 역량 · 설계 의도 */
   h += tbl(
     `<colgroup><col width="13%"><col width="17%"><col width="70%"></colgroup>` +
     `<tr>${lbl('교육과정\n성취기준')}<td colspan="2" style="border:${B};padding:5px 6px">${escapeHtml((d.achCode? d.achCode+' ':'') + fieldText(d.achStd))}</td></tr>` +
@@ -289,7 +370,6 @@ function renderDoc({a, b, e, d, tools}){
     `<tr>${lbl('수업설계 의도')}<td colspan="2" style="border:${B};padding:5px 6px;white-space:pre-wrap">${escapeHtml(a.intent||'')}</td></tr>`
   );
 
-  /* 학생별 개별 지원 */
   const sup = {}; (e.students||[]).forEach(s => sup[s.label] = s);
   const rows = (d.studentPlans||[]).map(p => {
     const x = sup[p.label] || {};
@@ -302,7 +382,6 @@ function renderDoc({a, b, e, d, tools}){
     `<tr>${th('학생')}${th('학생 특성')}${th('IEP 관련 목표')}${th('본 차시 개별적 지원 방안')}${th('생성형 AI 활용 자료 유형')}</tr>` + rows
   );
 
-  /* AI 활용 계획 */
   h += tbl(
     `<colgroup><col width="16%"><col width="42%"><col width="42%"></colgroup>` +
     cap('생성형 인공지능 활용 계획', 3) +
@@ -312,24 +391,32 @@ function renderDoc({a, b, e, d, tools}){
     `<tr>${lbl('생성형 AI\n윤리 준수 여부')}${td(ETHICS.map(r=>'☑ '+r[0]).join('\n'))}${td(ETHICS.map(r=>'☑ '+r[1]).join('\n'))}</tr>`
   );
 
-  /* 교수·학습 과정안 */
-  const stage = (name, time, s) =>
-    `<tr>${lbl(name + (time?'\n('+time+')':''))}${lbl(s.process||'')}${td(s.teacher||'')}${td(s.levelA||'')}${td(s.levelB||'')}${td(s.levelC||'')}${td(s.material||'')}</tr>`;
-
+  /* 과정안: 한글 서식과 같은 6열 구조 (교사 활동 1행 + 가·나·다 1행 반복) */
+  const cell = (t, at='', s='') => `<td${at} style="border:${B};padding:5px 6px;vertical-align:top;white-space:pre-wrap;${s}">${withBadge(escapeHtml(t||''))}</td>`;
+  const lab  = (t, at='') => cell(t, at, 'background:#f4f6f9;text-align:center;font-weight:700;vertical-align:middle');
   const dev = b.develop || [];
-  let devRows = dev.map((s,i) =>
-    `<tr>${i===0 ? `<td rowspan="${dev.length}" style="border:${B};background:#f4f6f9;text-align:center;font-weight:700;vertical-align:middle;white-space:pre-wrap">전개\n(30´)</td>` : ''}` +
-    `${lbl(s.process||'')}${td(s.teacher||'')}${td(s.levelA||'')}${td(s.levelB||'')}${td(s.levelC||'')}${td(s.material||'')}</tr>`
-  ).join('');
+  const devTotal = dev.reduce((n, x) => n + 2*(x.steps||[{}]).length, 0);
+  const one = (name, s) => `<tr>${lab(name)}${lab(s.process||'')}${cell(s.teacher||'',' colspan="3"')}${cell(s.material||'')}</tr>`;
+  let devRows = '';
+  dev.forEach((x, i) => {
+    const st = x.steps || [{}], k = 2*st.length;
+    st.forEach((s, j) => {
+      devRows += '<tr>' +
+        (i===0 && j===0 ? lab('전개\n(30´)', ` rowspan="${devTotal}"`) : '') +
+        (j===0 ? lab(x.process||'', ` rowspan="${k}"`) : '') +
+        cell(s.teacher||'', ' colspan="3"') +
+        (j===0 ? cell(x.material||'', ` rowspan="${k}"`) : '') + '</tr>';
+      devRows += `<tr>${cell(s.levelA)}${cell(s.levelB)}${cell(s.levelC)}</tr>`;
+    });
+  });
 
   h += tbl(
-    `<colgroup><col width="8%"><col width="12%"><col width="24%"><col width="14%"><col width="14%"><col width="14%"><col width="14%"></colgroup>` +
-    `<tr>${th('학습\n단계','',' rowspan="2"')}${th('학습\n과정','',' rowspan="2"')}${th('교사의 활동\n(생성형 AI 활용)','',' rowspan="2"')}${th('학생의 활동','',' colspan="3"')}${th('자료(◉) 및\n유의점(※)','',' rowspan="2"')}</tr>` +
+    `<colgroup><col width="8%"><col width="11%"><col width="22%"><col width="22%"><col width="22%"><col width="15%"></colgroup>` +
+    `<tr>${th('학습\n단계','',' rowspan="2"')}${th('학습\n과정','',' rowspan="2"')}${th('교수·학습 활동\n('+AI_MARK+' 생성형 AI 활용)','',' colspan="3"')}${th('자료(◉) 및\n유의점(※)','',' rowspan="2"')}</tr>` +
     `<tr>${th('가 수준')}${th('나 수준')}${th('다 수준')}</tr>` +
-    stage('도입','5´', b.intro||{}) + devRows + stage('정리','5´', b.close||{})
+    one('도입\n(5´)', b.intro||{}) + devRows + one('정리\n(5´)', b.close||{})
   );
 
-  /* 평가 계획 */
   const ev = (e.evaluation||[]).map(x =>
     `<tr>${lbl(x.domain)}${td(x.method,'text-align:center')}${td(x.high)}${td(x.mid)}${td(x.low)}</tr>`).join('');
   h += tbl(
@@ -338,7 +425,6 @@ function renderDoc({a, b, e, d, tools}){
     `<tr>${th('평 가 항 목')}${th('평 가 방 법')}${th('잘 함')}${th('보 통')}${th('노 력 요 함')}</tr>` + ev
   );
 
-  /* 수업 성찰 나눔 */
   const rf = (e.reflection||[]).map(q => `<tr>${td('○ '+q)}${td(' ')}</tr>`).join('');
   h += tbl(
     `<colgroup><col width="55%"><col width="45%"></colgroup>` +
@@ -368,5 +454,7 @@ async function copyToHwp(){
 
 window.generateDocument = generateDocument;
 window.copyToHwp = copyToHwp;
+window.__tidyPlan__ = tidy;
+window.__renderDoc__ = d => { DOC = d; renderDoc(d); };   // 붙여넣기 경로 미리보기     // 붙여넣기 경로(paste.js)에서도 같은 후처리를 쓰도록 공개
 
 })();
