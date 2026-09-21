@@ -1,23 +1,25 @@
 /* ═══════════════════════════════════════════════════════════
-   HWPX 내려받기 모듈 (v3 패치 부속)
+   HWPX 내려받기 모듈 (v3.2 패치 부속)
    ───────────────────────────────────────────────────────────
-   전제 1. 생성기_v3_패치.js 를 먼저 붙여넣어 두었을 것
-   전제 2. 교수학습과정안_템플릿.hwpx 를 HTML 과 같은 폴더에 둘 것
-   사용법  </body> 앞에 <script> … 이 파일 … </script>
+   v3.2 변경  전개를 활동별 단계(교사 1행 + 가·나·다 1행) 반복 구조로 확장
+   v3.1 변경  본문 [AI] 표기 → 초록 둥근 직사각형(생성형AI) 도형으로 변환
+              도형은 서식 머리행의 범례 도형을 복제하므로 모양·색이 서식과 동일
+   전제 1. 생성기 v3.1 패치(patch.js)를 먼저 붙여넣어 두었을 것
+   전제 2. template.hwpx 를 HTML 과 같은 폴더에 둘 것
    ═══════════════════════════════════════════════════════════ */
 (function(){
 
 const TEMPLATE_URL = './template.hwpx';
 const JSZIP_CDN    = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
 const HP           = 'http://www.hancom.co.kr/hwpml/2011/paragraph';
+const AI_MARK      = '[AI]';
+const AI_COLOR     = '#9BE5C8';
 
-/* 원본 hwpx 의 압축 방식 — mimetype 은 반드시 무압축·첫 번째 */
 const ORDER = ['mimetype','version.xml','Contents/header.xml','BinData/image1.png',
   'Contents/section0.xml','Preview/PrvText.txt','settings.xml','Preview/PrvImage.png',
   'META-INF/container.rdf','Contents/content.hpf','META-INF/container.xml','META-INF/manifest.xml'];
 const STORED = new Set(['mimetype','version.xml','BinData/image1.png','Preview/PrvImage.png']);
 
-/* ── 버튼 주입 ─────────────────────────────────────────── */
 function inject(){
   const bar = document.querySelector('.mini-actions');
   if(!bar || document.getElementById('btnHwpx')) return;
@@ -33,7 +35,6 @@ function inject(){
 document.addEventListener('DOMContentLoaded', inject);
 if(document.readyState !== 'loading') inject();
 
-/* ── JSZip 지연 로드 ───────────────────────────────────── */
 function loadJSZip(){
   if(window.JSZip) return Promise.resolve(window.JSZip);
   return new Promise((ok, no)=>{
@@ -45,7 +46,6 @@ function loadJSZip(){
   });
 }
 
-/* ── XML 셀 조작 ───────────────────────────────────────── */
 function makeDoc(xmlText){
   const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
   if(doc.querySelector('parsererror')) throw new Error('템플릿 XML 해석 실패');
@@ -62,7 +62,6 @@ function cellAt(tbl, r, c){
   return null;
 }
 
-/* 셀에 글을 쓴다. \n 은 문단 분리. 서식(글꼴·정렬·테두리)은 원본 그대로 유지된다. */
 function setCell(tbl, r, c, text){
   const tc = cellAt(tbl, r, c);
   if(!tc) return false;
@@ -92,10 +91,9 @@ function setCell(tbl, r, c, text){
   return true;
 }
 
-/* 학생 표(4번째 표)의 행 수를 인원수에 맞춘다 */
 function fitStudentRows(tbl, n){
   const trs = Array.from(tbl.getElementsByTagNameNS(HP,'tr')).filter(x=>x.parentNode===tbl);
-  const body = trs.slice(2);                 // 제목행·머리글행 제외
+  const body = trs.slice(2);
   const cur = body.length;
   n = Math.max(1, n);
   if(n > cur){
@@ -110,42 +108,93 @@ function fitStudentRows(tbl, n){
   tbl.setAttribute('rowCnt', String(n+2));
 }
 
-/* 과정안 표의 전개 활동 수를 n 개로 맞춘다.
-   한 활동 = 2행(공통 교수활동 + 수준별). 전개 셀의 세로 병합과 rowCnt 도 함께 고친다. */
-function fitDevelopRows(tbl, n){
-  const rows = () => Array.from(tbl.getElementsByTagNameNS(HP,'tr')).filter(x=>x.parentNode===tbl);
-  const addr = tc => tc.getElementsByTagNameNS(HP,'cellAddr')[0];
-  const span = tc => tc.getElementsByTagNameNS(HP,'cellSpan')[0];
+/* 과정안 표의 전개를 활동별 단계 수에 맞춘다 (v3.2)
+   ks = [활동1 단계 수, 활동2 단계 수, …]
+   한 단계 = 교사 활동 1행 + 가·나·다 1행
+   학습과정·자료 칸은 활동 단위로 세로 병합, 전개 칸은 전개 전체를 세로 병합 */
+function fitDevelopRows(tbl, ks){
+  const rows  = () => Array.from(tbl.getElementsByTagNameNS(HP,'tr')).filter(x=>x.parentNode===tbl);
+  const addr  = tc => tc.getElementsByTagNameNS(HP,'cellAddr')[0];
+  const span  = tc => tc.getElementsByTagNameNS(HP,'cellSpan')[0];
   const cells = tr => Array.from(tr.getElementsByTagNameNS(HP,'tc')).filter(x=>x.parentNode===tr);
+  const col   = tc => addr(tc).getAttribute('colAddr');
+  const drop  = (tr, cs) => { cells(tr).forEach(tc => { if(cs.includes(col(tc))) tr.removeChild(tc); }); return tr; };
 
-  let r = rows();
+  const r = rows();
   const head = r.slice(0,2), intro = r[2], close = r[r.length-1];
-  let blocks = [];
-  for(let i=3; i<r.length-1; i+=2) blocks.push([r[i], r[i+1]]);
+  const firstTch = r[3];                    // 전개·학습과정·교사활동·자료
+  const lvlRow   = r[4];                    // 가·나·다
+  const nextTch  = r.length > 6 ? r[5] : drop(r[3].cloneNode(true), ['0']);   // 학습과정·교사활동·자료
 
-  n = Math.max(1, Math.min(6, n));
-  if(n > blocks.length){
-    const [pa, pb] = blocks[blocks.length-1];
-    for(let k=blocks.length; k<n; k++){
-      const a = pa.cloneNode(true), b = pb.cloneNode(true);
-      cells(a).forEach(tc => { if(addr(tc).getAttribute('colAddr') === '0') a.removeChild(tc); });
-      blocks.push([a, b]);
+  ks = (ks && ks.length ? ks : [1]).slice(0, 6).map(k => Math.max(1, Math.min(4, k|0 || 1)));
+  const body = [], heads = [];
+  ks.forEach((k, i) => {
+    const t0 = (i===0 ? firstTch : nextTch).cloneNode(true);
+    heads.push([t0, 2*k]);
+    body.push(t0, lvlRow.cloneNode(true));
+    for(let j=1; j<k; j++){
+      body.push(drop(nextTch.cloneNode(true), ['0','1','5']), lvlRow.cloneNode(true));
     }
-  } else if(n < blocks.length){
-    blocks = blocks.slice(0, n);
-  }
+  });
 
   rows().forEach(tr => tbl.removeChild(tr));
-  [...head, intro, ...blocks.flat(), close].forEach(tr => tbl.appendChild(tr));
-
+  [...head, intro, ...body, close].forEach(tr => tbl.appendChild(tr));
   rows().forEach((tr, i) => cells(tr).forEach(tc => addr(tc).setAttribute('rowAddr', String(i))));
-  cells(rows()[3]).forEach(tc => {
-    if(addr(tc).getAttribute('colAddr') === '0') span(tc).setAttribute('rowSpan', String(2*n));
-  });
-  tbl.setAttribute('rowCnt', String(4 + 2*n));
+
+  heads.forEach(([tr, n]) => cells(tr).forEach(tc => {
+    const c = col(tc);
+    if(c === '1' || c === '5') span(tc).setAttribute('rowSpan', String(n));
+    if(c === '0') span(tc).setAttribute('rowSpan', String(body.length));
+  }));
+  tbl.setAttribute('rowCnt', String(4 + body.length));
 }
 
-/* ── 본 작업 ───────────────────────────────────────────── */
+/* ── v3.1  [AI] → 초록 둥근 직사각형 ─────────────────── */
+function findAiRect(doc){
+  const rects = doc.getElementsByTagNameNS(HP,'rect');
+  for(let i=0; i<rects.length; i++){
+    const b = rects[i].getElementsByTagNameNS('*','winBrush')[0];
+    if(b && (b.getAttribute('faceColor')||'').toUpperCase() === AI_COLOR) return rects[i];
+  }
+  return null;
+}
+const rid = () => String(1000000000 + Math.floor(Math.random()*1000000000));
+
+function applyAiMarks(doc){
+  const proto = findAiRect(doc);
+  const ts = Array.from(doc.getElementsByTagNameNS(HP,'t'))
+    .filter(t => (t.textContent||'').indexOf(AI_MARK) >= 0);
+  if(!proto){                       // 서식에 범례 도형이 없으면 표기만 지운다
+    ts.forEach(t => t.textContent = t.textContent.split(AI_MARK).join('').replace(/\s+$/,''));
+    return -1;
+  }
+  let n = 0;
+  ts.forEach(t => {
+    const run = t.parentNode;
+    const parts = t.textContent.split(AI_MARK);
+    t.textContent = parts[0].replace(/\s+$/,'') + ' ';
+    let after = t;
+    for(let i=1; i<parts.length; i++){
+      const r = proto.cloneNode(true);
+      r.setAttribute('id', rid());
+      r.setAttribute('instid', rid());
+      run.insertBefore(r, after.nextSibling); after = r;
+      const rest = parts[i].replace(/^\s+/,'');
+      if(rest){
+        const t2 = doc.createElementNS(HP,'hp:t');
+        t2.textContent = ' ' + rest;
+        run.insertBefore(t2, after.nextSibling); after = t2;
+      }
+      n++;
+    }
+    /* 도형 높이가 줄 배치 정보에 없으므로 지워서 한글이 다시 계산하게 한다 */
+    const p = run.parentNode;
+    const ls = Array.from(p.getElementsByTagNameNS(HP,'linesegarray')).find(x => x.parentNode === p);
+    if(ls) p.removeChild(ls);
+  });
+  return n;
+}
+
 async function exportHwpx(){
   const DOC = window.__DOC__;
   if(!DOC){ showToast('먼저 “⚡ 과정안 바로 생성”을 눌러 주세요.'); return; }
@@ -155,11 +204,12 @@ async function exportHwpx(){
   try{
     const JSZipLib = await loadJSZip();
     const res = await fetch(TEMPLATE_URL);
-    if(!res.ok) throw new Error('템플릿 파일을 찾을 수 없습니다 — 교수학습과정안_템플릿.hwpx 를 HTML 과 같은 폴더에 두세요');
+    if(!res.ok) throw new Error('템플릿 파일을 찾을 수 없습니다 — template.hwpx 를 HTML 과 같은 폴더에 두세요');
     const zip = await JSZipLib.loadAsync(await res.arrayBuffer());
 
     const doc = makeDoc(await zip.file('Contents/section0.xml').async('string'));
     writeAll(doc, DOC);
+    const marks = applyAiMarks(doc);
 
     const xml = new XMLSerializer().serializeToString(doc);
     const out = new JSZipLib();
@@ -178,14 +228,15 @@ async function exportHwpx(){
     a.download = `${safe(d.subject)}_${safe(d.unit)}_교수학습과정안.hwpx`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
-    showToast('한글파일을 내려받았습니다.');
+    showToast(marks < 0
+      ? '내려받았습니다. 서식에 AI 표시 도형이 없어 표시는 생략했습니다.'
+      : `한글파일을 내려받았습니다. AI 활용 표시 ${marks}곳`);
   }catch(err){
     showToast('실패: ' + err.message);
   }
   btn.disabled = false; btn.textContent = '⬇ 한글파일 내려받기';
 }
 
-/* ── JSON → 셀 주소 매핑 ───────────────────────────────── */
 function writeAll(doc, {a, b, e, d, tools}){
   let T = tblsOf(doc);
   const plans = d.studentPlans || [];
@@ -193,10 +244,8 @@ function writeAll(doc, {a, b, e, d, tools}){
   T = tblsOf(doc);
   const S = (ti,r,c,v) => setCell(T[ti], r, c, v);
 
-  /* 0. 제목 */
   S(0,0,0, `생성형 AI 기반 「프로그램」운영을 통한 맞춤형 특수교육 실천 역량 강화 방안 연구\n( ${fieldText(d.subject)} )과 교수·학습 과정안`);
 
-  /* 1. 기본 정보 */
   S(1,0,1, fieldText(d.lessonDate));
   S(1,0,3, fieldText(d.targetClass));
   S(1,0,5, d.teacherName);
@@ -206,7 +255,6 @@ function writeAll(doc, {a, b, e, d, tools}){
   S(1,2,3, fieldText(d.lessonNo));
   S(1,3,1, fieldText(d.lessonGoal));
 
-  /* 2. 성취기준 · 역량 · 설계 의도 */
   S(2,0,1, (d.achCode ? d.achCode+' ' : '') + fieldText(d.achStd));
   const C15 = ['자기관리','지식정보처리','창의적 사고','심미적 감성','의사소통','공동체'];
   const C22 = ['자기관리','지식정보처리','창의적 사고','심미적 감성','협력적 소통','공동체'];
@@ -220,7 +268,6 @@ function writeAll(doc, {a, b, e, d, tools}){
   S(2,2,2, box(C22, is22 ? pick : []));
   S(2,3,1, a.intent || '');
 
-  /* 3. 학생별 개별 지원 */
   const sup = {}; (e.students||[]).forEach(s => sup[s.label] = s);
   plans.forEach((p, i) => {
     const x = sup[p.label] || {};
@@ -231,33 +278,37 @@ function writeAll(doc, {a, b, e, d, tools}){
     S(3, 2+i, 4, x.aiMaterial || '');
   });
 
-  /* 4. 생성형 AI 활용 계획 */
   const TOOLS = ['ChatGPT','Claude','Gemini','Grok','Kling','기타'];
   S(4,1,1, TOOLS.map(t => (d.aiTools.includes(t)?'■ ':'□ ')+t).join('  ')
            + (d.customAiTool ? '  ('+d.customAiTool+')' : ''));
   S(4,2,1, a.aiPlan || '');
 
-  /* 5. 교수·학습 과정안 — 활동 수에 맞춰 표를 늘린 뒤 채운다 */
-  const dev = (b.develop || []).filter(x => x && (x.teacher || x.process || x.levelA));
+  const dev = (b.develop || []).filter(x => x && (x.process || (x.steps && x.steps.length) || x.teacher));
   if(!dev.length) dev.push({});
-  fitDevelopRows(T[5], dev.length);
+  dev.forEach(x => {
+    if(!Array.isArray(x.steps) || !x.steps.length)
+      x.steps = [{ teacher:x.teacher, levelA:x.levelA, levelB:x.levelB, levelC:x.levelC }];
+  });
+  fitDevelopRows(T[5], dev.map(x => x.steps.length));
   T = tblsOf(doc);
   const io_ = b.intro || {}, cl = b.close || {};
 
   S(5,2,1, io_.process || '');  S(5,2,2, io_.teacher || '');  S(5,2,5, io_.material || '');
-  dev.forEach((x, i) => {
-    const r = 3 + 2*i;
-    S(5, r,   1, x.process  || '');
-    S(5, r,   2, x.teacher  || '');
-    S(5, r,   5, x.material || '');
-    S(5, r+1, 2, x.levelA   || '');
-    S(5, r+1, 3, x.levelB   || '');
-    S(5, r+1, 4, x.levelC   || '');
+  let r = 3;
+  dev.forEach(x => {
+    S(5, r, 1, x.process  || '');
+    S(5, r, 5, x.material || '');
+    x.steps.forEach(s => {
+      S(5, r,   2, s.teacher || '');
+      S(5, r+1, 2, s.levelA  || '');
+      S(5, r+1, 3, s.levelB  || '');
+      S(5, r+1, 4, s.levelC  || '');
+      r += 2;
+    });
   });
-  const rc = 3 + 2*dev.length;
+  const rc = r;
   S(5,rc,1, cl.process || '');  S(5,rc,2, cl.teacher || '');  S(5,rc,5, cl.material || '');
 
-  /* 6. 평가 계획 */
   (e.evaluation || []).slice(0,3).forEach((x, i) => {
     S(6, 2+i, 1, x.method || '');
     S(6, 2+i, 2, x.high || '');
@@ -267,4 +318,5 @@ function writeAll(doc, {a, b, e, d, tools}){
 }
 
 window.exportHwpx = exportHwpx;
+window.applyAiMarks = applyAiMarks;   // 붙여넣기 경로(paste.js)에서도 호출 가능
 })();
