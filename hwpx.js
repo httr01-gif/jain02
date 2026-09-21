@@ -1,6 +1,8 @@
 /* ═══════════════════════════════════════════════════════════
-   HWPX 내려받기 모듈 (v3.4 패치 부속)
+   HWPX 내려받기 모듈 (v3.5 패치 부속)
    ───────────────────────────────────────────────────────────
+   v3.5 변경  제목 표를 PAIR 로고 서식으로 변경 (HY헤드라인M, 1행 9pt + 로고, 2행 20pt 가운데)
+   v3.4.1 수정  글이 아래 표를 덮는 오류 수정 (줄 배치 정보 삭제 → 한 줄로 초기화)
    v3.4 변경  칸 줄 간격 오류 수정, 학생 특성 AI 추출값 사용
    v3.3 변경  핵심역량 체크박스 탭 정렬, 학생 지원 표 머리 문구 변경
    v3.2 변경  전개를 활동별 단계(교사 1행 + 가·나·다 1행) 반복 구조로 확장
@@ -17,7 +19,14 @@ const HP           = 'http://www.hancom.co.kr/hwpml/2011/paragraph';
 const AI_MARK      = '[AI]';
 const AI_COLOR     = '#9BE5C8';
 const HH           = 'http://www.hancom.co.kr/hwpml/2011/head';
-const TAB_POS      = [11000, 22500];   // 핵심역량 체크박스 2열·3열 시작 위치 (HWPUNIT, 셀 폭 약 33,800)
+const TAB_POS      = [11000, 22500];
+/* 제목 표 문구 — 로고 그림은 「 와 프로그램 사이에 들어간다 */
+const TITLE_HEAD   = '생성형 AI 기반 「';
+const TITLE_TAIL   = '프로그램」운영을 통한 맞춤형 특수교육 실천 연구';
+const TITLE_FONT   = 'HY헤드라인M';   // 제목 1행·2행 글꼴
+const TITLE_SIZE1  = 900;             // 1행 9pt
+const TITLE_SIZE2  = 2000;            // 2행 20pt
+const TITLE_USE_LOGO = true;          // false 로 두면 로고 대신 글자 'PAIR'   // 핵심역량 체크박스 2열·3열 시작 위치 (HWPUNIT, 셀 폭 약 33,800)
 
 const ORDER = ['mimetype','version.xml','Contents/header.xml','BinData/image1.png',
   'Contents/section0.xml','Preview/PrvText.txt','settings.xml','Preview/PrvImage.png',
@@ -57,6 +66,20 @@ function makeDoc(xmlText){
 }
 const tblsOf = doc => Array.from(doc.getElementsByTagNameNS(HP,'tbl'));
 
+/* 줄 배치 정보를 '한 줄짜리'로 초기화한다 (v3.4.1)
+   - 통째로 지우면 한글이 셀 높이를 다시 늘리지 않아 글이 아래 표를 덮는다
+   - 서식의 여러 줄 정보를 그대로 두면 문단마다 빈 줄이 생긴다
+   → 첫 줄 정보만 남기고 위치를 0 으로 맞추면 한글이 열 때 정상적으로 다시 배치한다 */
+function resetLineseg(p){
+  const arr = Array.from(p.getElementsByTagNameNS(HP,'linesegarray')).find(x => x.parentNode === p);
+  if(!arr) return;
+  const segs = Array.from(arr.getElementsByTagNameNS(HP,'lineseg'));
+  if(!segs.length) return;
+  segs.slice(1).forEach(s => arr.removeChild(s));
+  segs[0].setAttribute('textpos','0');
+  segs[0].setAttribute('vertpos','0');
+}
+
 function cellAt(tbl, r, c){
   for(const tc of Array.from(tbl.getElementsByTagNameNS(HP,'tc'))){
     const a = tc.getElementsByTagNameNS(HP,'cellAddr')[0];
@@ -90,10 +113,7 @@ function setCell(tbl, r, c, text){
       const t = p.ownerDocument.createElementNS(HP,'hp:t');
       t.textContent = line; run.appendChild(t);
     }
-    /* 서식에 남은 줄 배치 정보를 지운다. 남겨 두면 원래 여러 줄이던 칸에서
-       문단마다 빈 줄이 생겨 간격이 벌어진다. 한글이 열 때 다시 계산한다. */
-    const ls = Array.from(p.getElementsByTagNameNS(HP,'linesegarray')).find(x => x.parentNode === p);
-    if(ls) p.removeChild(ls);
+    resetLineseg(p);
     if(i>0) sub.appendChild(p);
   });
   return true;
@@ -157,6 +177,97 @@ function fitDevelopRows(tbl, ks){
   tbl.setAttribute('rowCnt', String(4 + body.length));
 }
 
+/* ── v3.5  제목 표 (PAIR 로고 서식) ──────────────────
+   1행  작은 굵은 글씨 + 「 로고 프로그램」
+   2행  큰 굵은 글씨 가운데 정렬 "( 교과 )과 교수·학습 과정안" */
+function addFont(hdoc, face){
+  const faces = Array.from(hdoc.getElementsByTagNameNS(HH,'fontface'));
+  const hf = faces.find(f => f.getAttribute('lang') === 'HANGUL');
+  if(!hf) return null;
+  const fonts = Array.from(hf.getElementsByTagNameNS(HH,'font'));
+  const hit = fonts.find(f => f.getAttribute('face') === face);
+  if(hit) return hit.getAttribute('id');
+  const f = fonts[0].cloneNode(false);
+  f.setAttribute('id', String(fonts.length));
+  f.setAttribute('face', face);
+  f.setAttribute('type', 'TTF');
+  f.setAttribute('isEmbedded', '0');
+  hf.appendChild(f);
+  hf.setAttribute('fontCnt', String(fonts.length + 1));
+  return String(fonts.length);
+}
+function addCharPr(hdoc, baseId, opt){
+  const box = hdoc.getElementsByTagNameNS(HH,'charProperties')[0];
+  const list = Array.from(box.getElementsByTagNameNS(HH,'charPr')).filter(x => x.parentNode === box);
+  const base = list.find(x => x.getAttribute('id') === String(baseId)) || list[0];
+  const c = base.cloneNode(true);
+  const id = String(maxId(list) + 1);
+  c.setAttribute('id', id);
+  c.setAttribute('height', String(opt.height));
+  const fr = c.getElementsByTagNameNS(HH,'fontRef')[0];
+  if(fr && opt.font != null) fr.setAttribute('hangul', opt.font);
+  const sp = c.getElementsByTagNameNS(HH,'spacing')[0];
+  if(sp && opt.spacing != null) sp.setAttribute('hangul', String(opt.spacing));
+  if(!c.getElementsByTagNameNS(HH,'bold')[0]){
+    const b = hdoc.createElementNS(HH,'hh:bold');
+    const ul = c.getElementsByTagNameNS(HH,'underline')[0];
+    ul ? c.insertBefore(b, ul) : c.appendChild(b);
+  }
+  box.appendChild(c);
+  box.setAttribute('itemCnt', String(list.length + 1));
+  return id;
+}
+function addCenterParaPr(hdoc, baseId){
+  const pps = hdoc.getElementsByTagNameNS(HH,'paraProperties')[0];
+  const list = Array.from(pps.getElementsByTagNameNS(HH,'paraPr')).filter(x => x.parentNode === pps);
+  const base = list.find(x => x.getAttribute('id') === String(baseId)) || list[0];
+  const pp = base.cloneNode(true);
+  const id = String(maxId(list) + 1);
+  pp.setAttribute('id', id);
+  const al = pp.getElementsByTagNameNS(HH,'align')[0];
+  if(al) al.setAttribute('horizontal','CENTER');
+  Array.from(pp.getElementsByTagNameNS('*','intent')).forEach(x => x.setAttribute('value','0'));
+  pps.appendChild(pp);
+  pps.setAttribute('itemCnt', String(list.length + 1));
+  return id;
+}
+
+function writeTitle(doc, hdoc, subject){
+  const tc = cellAt(tblsOf(doc)[0], 0, 0);
+  if(!tc) return;
+  const sub = tc.getElementsByTagNameNS(HP,'subList')[0];
+  const ps = Array.from(sub.getElementsByTagNameNS(HP,'p')).filter(p => p.parentNode === sub);
+  const p1 = ps[0];
+  const pic = p1.getElementsByTagNameNS(HP,'pic')[0];
+  const run0 = Array.from(p1.getElementsByTagNameNS(HP,'run')).find(r => r.parentNode === p1);
+  const baseChar = run0.getAttribute('charPrIDRef');
+  const basePara = p1.getAttribute('paraPrIDRef');
+
+  const fid = addFont(hdoc, TITLE_FONT);
+  const c1 = addCharPr(hdoc, baseChar, { height: TITLE_SIZE1, font: fid, spacing: 0 });
+  const c2 = addCharPr(hdoc, baseChar, { height: TITLE_SIZE2, font: fid, spacing: 0 });
+  const pc = addCenterParaPr(hdoc, basePara);
+
+  ps.slice(1).forEach(p => sub.removeChild(p));
+  const p2 = p1.cloneNode(true);
+
+  const mkT = s => { const t = doc.createElementNS(HP,'hp:t'); t.textContent = s; return t; };
+  const fill = (p, charId, nodes) => {
+    Array.from(p.getElementsByTagNameNS(HP,'run')).filter(r => r.parentNode === p).forEach(r => p.removeChild(r));
+    const run = doc.createElementNS(HP,'hp:run');
+    run.setAttribute('charPrIDRef', charId);
+    nodes.forEach(n => run.appendChild(n));
+    const ls = Array.from(p.getElementsByTagNameNS(HP,'linesegarray')).find(x => x.parentNode === p);
+    ls ? p.insertBefore(run, ls) : p.appendChild(run);
+    resetLineseg(p);
+  };
+  fill(p1, c1, (pic && TITLE_USE_LOGO) ? [mkT(TITLE_HEAD), pic, mkT(TITLE_TAIL)]
+                                        : [mkT(TITLE_HEAD + 'PAIR ' + TITLE_TAIL)]);
+  p2.setAttribute('paraPrIDRef', pc);
+  fill(p2, c2, [mkT(`( ${subject} )과 교수·학습 과정안`)]);
+  sub.appendChild(p2);
+}
+
 /* ── v3.3  핵심역량 체크박스 탭 정렬 ───────────────────
    header.xml 에 탭 위치가 고정된 문단 모양을 하나 추가하고,
    체크박스 칸의 \t 를 한글 탭으로 바꾼다 */
@@ -212,8 +323,7 @@ function tabifyCell(tc, paraId){
         if(part) t.appendChild(doc.createTextNode(part));
       });
     });
-    const ls = Array.from(p.getElementsByTagNameNS(HP,'linesegarray')).find(x => x.parentNode === p);
-    if(ls) p.removeChild(ls);
+    resetLineseg(p);
   });
 }
 
@@ -255,10 +365,7 @@ function applyAiMarks(doc){
       }
       n++;
     }
-    /* 도형 높이가 줄 배치 정보에 없으므로 지워서 한글이 다시 계산하게 한다 */
-    const p = run.parentNode;
-    const ls = Array.from(p.getElementsByTagNameNS(HP,'linesegarray')).find(x => x.parentNode === p);
-    if(ls) p.removeChild(ls);
+    resetLineseg(run.parentNode);
   });
   return n;
 }
@@ -278,6 +385,7 @@ async function exportHwpx(){
     const doc  = makeDoc(await zip.file('Contents/section0.xml').async('string'));
     const hdoc = makeDoc(await zip.file('Contents/header.xml').async('string'));
     writeAll(doc, DOC);
+    writeTitle(doc, hdoc, fieldText(DOC.d.subject));
 
     /* 핵심역량 체크박스 탭 정렬 */
     const T2 = tblsOf(doc)[2];
@@ -324,7 +432,7 @@ function writeAll(doc, {a, b, e, d, tools}){
   T = tblsOf(doc);
   const S = (ti,r,c,v) => setCell(T[ti], r, c, v);
 
-  S(0,0,0, `생성형 AI 기반 「프로그램」운영을 통한 맞춤형 특수교육 실천 역량 강화 방안 연구\n( ${fieldText(d.subject)} )과 교수·학습 과정안`);
+  /* 0. 제목은 writeTitle() 에서 서식째 작성 */
 
   S(1,0,1, fieldText(d.lessonDate));
   S(1,0,3, fieldText(d.targetClass));
