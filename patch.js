@@ -1,6 +1,7 @@
 /* ═══════════════════════════════════════════════════════════
-   공개수업 지도안 프롬프트 생성기 v3.4 패치
+   공개수업 지도안 프롬프트 생성기 v3.5 패치
    ───────────────────────────────────────────────────────────
+   v3.5 변경  제목 표를 PAIR 로고 서식으로 변경, 학생 특성 주어 삭제와 "~함" 종결
    v3.4 변경  학생 특성은 AI가 수업 관련 핵심만 추출, IEP 목표는 입력값 유지,
               AI 활용 개별 지원 방안 구체화, 칸 줄 간격 오류 수정
    v3.3 변경  핵심역량 체크박스 탭 정렬, 학생별 지원과 자료 유형 2줄 이내,
@@ -238,7 +239,8 @@ const P3 = c => `${c}
 
 (1) 학생별 "학생 특성", "본 차시 AI 활용 개별적 지원 방안", "생성형 AI 활용 자료 개발 유형"을 작성.
     char: 교사가 입력한 학생 특성을 그대로 옮기지 말고 분석하여, 이 수업의 활동과 목표에 직접 관련된 핵심 특성만 1~2줄.
-          줄마다 "- "로 시작, 35자 이내, 명사형으로 끝낸다. 수업과 관계없는 특성은 뺀다. IEP 목표는 쓰지 않는다.
+          줄마다 "- "로 시작, 35자 이내. "학습자는", "학생은" 같은 주어를 쓰지 않고 "~함", "~있음" 형태로 끝낸다.
+          예: "- 그림 단서가 있으면 두 개 중 하나를 고를 수 있음" 수업과 관계없는 특성과 IEP 목표는 쓰지 않는다.
     support: 어느 활동에서 어떤 AI 제작 자료를 어떻게 제시하고 어떤 촉구로 수행을 돕는지 구체적으로 1~2줄.
           줄마다 "- "로 시작, 40~60자, 명사형으로 끝낸다. 예: "- 활동1에서 AI 제작 장면 카드를 2장으로 줄여 제시하고 손짓 촉구로 선택 지원"
     aiMaterial: 교사가 생성형 AI로 개발하는 자료 유형 1~2줄. 줄마다 "- "로 시작, 20자 이내 명사형. 예: "- 상황 그림 카드", "- 짧은 대화 영상"
@@ -285,9 +287,19 @@ function dashLines(text){
     .map(s => '- ' + s)
     .join('\n');
 }
-/* 학생별 지원·자료 유형: 핵심 2줄 이내, 줄마다 "- " */
+/* 학생 특성: 주어 삭제, "~함" 형태 종결 */
+function charStyle(s){
+  return s.replace(/^(?:해당\s*|본\s*|이\s*)?(?:학습자|학생|대상\s*학생)(?:은|는|이|가)\s*/, '')
+    .replace(/\s*[.。]\s*$/, '')
+    .replace(/있다$/, '있음').replace(/없다$/, '없음').replace(/이다$/, '임')
+    .replace(/한다$/, '함').replace(/된다$/, '됨').replace(/진다$/, '짐')
+    .replace(/(?:보인다|나타낸다)$/, '보임');
+}
+/* 학생별 특성·지원·자료 유형: 핵심 2줄 이내, 줄마다 "- " */
 function tidyStudents(list){
   (list || []).forEach(x => {
+    x.char = String(x.char || '').split('\n')
+      .map(s => charStyle(s.replace(/^\s*[-–—·•]\s*/, '').trim())).join('\n');
     ['char', 'support', 'aiMaterial'].forEach(k => {
       x[k] = String(x[k] || '').split('\n')
         .map(s => s.replace(/^\s*[-–—·•]\s*/, '').trim())
@@ -395,8 +407,8 @@ function renderDoc({a, b, e, d, tools}){
 
   let h = `<div style="font-family:바탕,Batang,serif;color:#000">
   <div style="text-align:center;font-size:14px;font-weight:800;line-height:1.8;margin-bottom:12px">
-    생성형 AI 기반 「프로그램」 운영을 통한 맞춤형 특수교육 실천 역량 강화 방안 연구<br>
-    ( ${escapeHtml(fieldText(d.subject))} )과 교수·학습 과정안</div>`;
+    <div style="text-align:left;font-size:12px">생성형 AI 기반 「<b style="color:#1f4e9c">PAIR</b> 프로그램」운영을 통한 맞춤형 특수교육 실천 연구</div>
+    <div style="font-size:22px;letter-spacing:.02em">( ${escapeHtml(fieldText(d.subject))} )과 교수·학습 과정안</div></div>`;
 
   h += tbl(
     `<colgroup><col width="11%"><col width="24%"><col width="10%"><col width="21%"><col width="13%"><col width="21%"></colgroup>` +
