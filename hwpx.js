@@ -1,6 +1,7 @@
 /* ═══════════════════════════════════════════════════════════
-   HWPX 내려받기 모듈 (v3.3 패치 부속)
+   HWPX 내려받기 모듈 (v3.4 패치 부속)
    ───────────────────────────────────────────────────────────
+   v3.4 변경  칸 줄 간격 오류 수정, 학생 특성 AI 추출값 사용
    v3.3 변경  핵심역량 체크박스 탭 정렬, 학생 지원 표 머리 문구 변경
    v3.2 변경  전개를 활동별 단계(교사 1행 + 가·나·다 1행) 반복 구조로 확장
    v3.1 변경  본문 [AI] 표기 → 초록 둥근 직사각형(생성형AI) 도형으로 변환
@@ -89,6 +90,10 @@ function setCell(tbl, r, c, text){
       const t = p.ownerDocument.createElementNS(HP,'hp:t');
       t.textContent = line; run.appendChild(t);
     }
+    /* 서식에 남은 줄 배치 정보를 지운다. 남겨 두면 원래 여러 줄이던 칸에서
+       문단마다 빈 줄이 생겨 간격이 벌어진다. 한글이 열 때 다시 계산한다. */
+    const ls = Array.from(p.getElementsByTagNameNS(HP,'linesegarray')).find(x => x.parentNode === p);
+    if(ls) p.removeChild(ls);
     if(i>0) sub.appendChild(p);
   });
   return true;
@@ -349,7 +354,7 @@ function writeAll(doc, {a, b, e, d, tools}){
   plans.forEach((p, i) => {
     const x = sup[p.label] || {};
     S(3, 2+i, 0, p.label);
-    S(3, 2+i, 1, fieldText(p.char));
+    S(3, 2+i, 1, x.char || fieldText(p.char));   // AI가 추린 수업 관련 특성, 없으면 입력값
     S(3, 2+i, 2, fieldText(p.goal));
     S(3, 2+i, 3, x.support || '');
     S(3, 2+i, 4, x.aiMaterial || '');
