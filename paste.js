@@ -1,16 +1,17 @@
 /* ═══════════════════════════════════════════════════════════
-   붙여넣기 → 한글파일 변환 경로
+   붙여넣기 → 한글파일 변환 경로 (v3.2)
    ───────────────────────────────────────────────────────────
-   API 없이도 과정안을 만든다.
-   ① [[라벨]] 프롬프트 복사 → ChatGPT·Claude 아무 데나 붙여넣기
-   ② 결과를 그대로 복사해서 아래 칸에 붙여넣기
-   ③ 변환 → 한글파일 내려받기
-   </body> 앞, hwpx.js 뒤에 <script src="paste.js"></script>
+   v3.2 변경  API 경로와 같은 규칙 적용
+     ① 전개 단계 구조  활동마다 단계 2~4개, 단계마다 교사 + 가·나·다
+     ② 생성형 AI 표시  ▣ 제목 끝 [AI] → 한글 파일 초록 도형
+     ③ 자료·유의점 축소  ◉ 3개 이내, ※ 1개 25자 이내 + 후처리
+     ④ 도입 구성  ▣ 4개, 수준별 학습목표, 【활동n】 목록 자동 채움
+   </body> 앞, patch.js → hwpx.js 뒤에 <script src="paste.js"></script>
    ═══════════════════════════════════════════════════════════ */
 (function(){
 
 /* ── 라벨 정의 : [[라벨]] → 들어갈 자리 ───────────────── */
-function slots(n){
+function slots(n, s){
   const list = [
     ['수업설계의도', 'a.intent'],
     ['AI활용구상',   'a.aiPlan'],
@@ -21,10 +22,13 @@ function slots(n){
   for(let i=0; i<n; i++){
     const k = i+1;
     list.push([`전개${k}-과정`, `b.develop.${i}.process`]);
-    list.push([`전개${k}-교사`, `b.develop.${i}.teacher`]);
-    list.push([`전개${k}-가`,   `b.develop.${i}.levelA`]);
-    list.push([`전개${k}-나`,   `b.develop.${i}.levelB`]);
-    list.push([`전개${k}-다`,   `b.develop.${i}.levelC`]);
+    for(let j=0; j<s; j++){
+      const t = j+1;
+      list.push([`전개${k}-${t}단계-교사`, `b.develop.${i}.steps.${j}.teacher`]);
+      list.push([`전개${k}-${t}단계-가`,   `b.develop.${i}.steps.${j}.levelA`]);
+      list.push([`전개${k}-${t}단계-나`,   `b.develop.${i}.steps.${j}.levelB`]);
+      list.push([`전개${k}-${t}단계-다`,   `b.develop.${i}.steps.${j}.levelC`]);
+    }
     list.push([`전개${k}-자료`, `b.develop.${i}.material`]);
   }
   list.push(['정리-과정', 'b.close.process']);
@@ -32,10 +36,12 @@ function slots(n){
   list.push(['정리-자료', 'b.close.material']);
   return list;
 }
-const devCount = () => {
-  const el = document.getElementById('devCount');
-  return el ? (parseInt(el.value,10) || 2) : 2;
+const selNum = (id, def) => {
+  const el = document.getElementById(id);
+  return el ? (parseInt(el.value,10) || def) : def;
 };
+const devCount  = () => selNum('devCount', 2);
+const stepCount = () => selNum('stepCount', 3);
 const EVAL = [['지식이해','지식·이해'],['과정기능','과정·기능'],['가치태도','가치·태도']];
 
 /* ── 프롬프트 생성 ─────────────────────────────────────── */
@@ -43,12 +49,13 @@ function buildPastePrompt(){
   const d = data();
   const tools = [...d.aiTools]; if(d.customAiTool) tools.push(d.customAiTool);
   const plans = d.studentPlans || [];
+  const n = devCount(), s = stepCount();
 
   const stuLabels = plans.map(p =>
 `[[학생${p.label}-지원]]
 [[학생${p.label}-AI자료]]`).join('\n');
 
-  const evalLabels = EVAL.map(([k,n]) =>
+  const evalLabels = EVAL.map(([k]) =>
 `[[평가-${k}-방법]]
 [[평가-${k}-잘함]]
 [[평가-${k}-보통]]
@@ -91,22 +98,46 @@ ${getTypeExtra(d.lessonType)}
 설명이나 머리말 없이 첫 줄부터 [[수업설계의도]] 로 시작하세요.
 
 작성 규칙
-· 괄호를 절대 쓰지 않습니다. ( ) 「 」 [ ] 모두 금지입니다.
-  "교사 검토 필요", "해당 없음" 같은 덧붙임 표시도 넣지 않습니다.
-  보충 설명이 필요하면 쉼표로 잇거나 문장을 나눕니다.
-· 교사 칸은 "▣"로 활동을 묶고 그 아래 " - "로 세부 항목. 모든 항목을 "~하기" 로 끝냅니다.
-· 학생 칸은 모든 줄을 "- " 로 시작합니다. 관찰 가능한 수행 행동만 쓰고 "~한다." 로 끝냅니다.
-  한 칸에 2줄, 가·나·다의 차이가 촉진 위계인 독립 수행, 언어·시각 촉진, 신체 촉진으로 드러나게 합니다.
+· 괄호를 쓰지 않습니다. ( ) 「 」 [ ] 모두 금지이며 "교사 검토 필요" 같은 덧붙임 표시도 넣지 않습니다.
+  단, 생성형 AI 표시 [AI] 와 활동 목록 표기 【활동1】 두 가지만 예외로 허용합니다.
+
+· 생성형 AI 표시
+  교사가 생성형 AI로 제작한 자료를 쓰는 ▣ 제목 줄의 맨 끝에만 [AI] 를 붙입니다. 보기 - ▣ 동기 유발하기 [AI]
+  도입은 1개 이내, 전개는 적어도 1개 활동에 표시, 정리는 AI 제작 자료를 실제로 쓸 때만 표시합니다.
+  세부 항목 줄, 학생 칸, 자료 칸에는 [AI] 를 쓰지 않습니다.
+  본문에 AI 도구 이름을 쓰지 않고 "AI로 제작한 대화 카드"처럼만 씁니다.
+
+· 도입-교사
+  ▣ 4개를 이 순서로 씁니다. ▣ 수업 준비하기 / ▣ 동기 유발하기 / ▣ 학습목표 확인하기 / ▣ 학습활동 안내하기
+  수업 준비하기, 동기 유발하기 아래에는 " - " 세부 항목 1~2줄, 줄마다 30자 이내, "~하기"로 끝냅니다.
+  동기 유발하기에 교사 발문을 큰따옴표로 1개 넣습니다.
+  학습목표 확인하기 아래에는 " • 가 : ~할 수 있다." " • 나 : ~할 수 있다." " • 다 : ~할 수 있다." 3줄을 씁니다.
+  학습활동 안내하기 아래에는 아무것도 쓰지 않습니다. 프로그램이 전개 활동 목록을 채웁니다.
+
+· 정리-교사
+  ▣ 3개를 이 순서로 씁니다. ▣ 정리 및 평가하기 / ▣ 차시 예고하기 / ▣ 인사하기
+  각 ▣ 아래 " - " 세부 항목 1~2줄, "~하기"로 끝냅니다.
+
+· 전개 — 과정안에서 가장 구체적인 부분입니다
+  활동은 정확히 ${n}개, 활동마다 단계는 정확히 ${s}개입니다. 라벨에 있는 만큼만 씁니다.
+  단계 흐름은 자료 제시와 시범 → 학생 수행 → 확인과 피드백 순서로 짭니다.
+  전개-과정 칸은 "활동1 ▶ 활동 제목" 형식 한 줄, 제목은 15자 이내입니다.
+  단계-교사 칸은 첫 줄 "▣ 단계 제목하기", 그 아래 " - " 세부 항목 2~3줄입니다.
+    무엇을 어떻게 제시하는지, 큰따옴표 발문, 촉구나 피드백 방법이 구체적으로 드러나야 합니다. 모든 항목을 "~하기"로 끝냅니다.
+  단계-가·나·다 칸은 "- "로 시작하는 1~2줄, 칸당 30~60자, "~한다."로 끝냅니다.
+    바로 위 교사 단계에 대응하는 관찰 가능한 수행만 쓰고, 개수·횟수·반응 방식을 밝힙니다.
+    촉구 위계를 드러냅니다. 가 "스스로", 나 "언어적 촉구를 받아", 다 "신체적 촉구를 받아" 또는 "그림 카드를 가리켜".
+
 · 자료 칸은 매우 짧게 씁니다. 칸이 좁아 분량이 넘치면 표가 밀립니다.
-  ◉ 로 시작하는 자료 2줄, ※ 로 시작하는 유의점 2줄, 모두 합해 4줄을 넘기지 않습니다.
-  각 줄은 20자 안팎의 명사구로 끝냅니다. 문장으로 풀어 쓰지 않습니다.
-  ※ 중 하나는 안전에 관한 것으로 합니다.
-  보기 - ◉ 드립백 필터, 원두 ◉ 순서 그림카드 ※ 뜨거운 물 취급 주의 ※ 촉진은 점차 줄이기
-· 전개 활동은 정확히 ${devCount()}개입니다. 라벨에 있는 만큼만 쓰고 임의로 늘리거나 줄이지 않습니다.
-· 과정 칸은 짧은 낱말을 줄바꿈으로 나열합니다.
+  ◉ 로 시작하는 자료는 명사형 20자 이내, 도입과 전개는 3줄 이내, 정리는 2줄 이내입니다.
+  AI로 만든 자료는 앞에 "AI 제작"을 붙입니다. 보기 - ◉ AI 제작 대화 장면 카드
+  ※ 로 시작하는 유의점은 칸마다 정확히 1줄, 25자 이내 명사형입니다.
+  안전 위험이 있으면 안전을, 없으면 개별 지원을 씁니다. 보기 - ※ 음량과 재생 속도 사전 점검
+
+· 도입-과정, 정리-과정 칸은 짧은 낱말을 줄바꿈으로 나열합니다.
 · 평가의 잘함·보통·노력요함은 촉진 횟수나 수행 단계 수로 구분되는 문장으로 씁니다.
 
-${slots(devCount()).map(([l]) => `[[${l}]]`).join('\n')}
+${slots(n, s).map(([l]) => `[[${l}]]`).join('\n')}
 ${stuLabels}
 ${evalLabels}`;
 }
@@ -143,22 +174,38 @@ function buildDoc(text){
 
   const d = data();
   const tools = [...d.aiTools]; if(d.customAiTool) tools.push(d.customAiTool);
-  /* 붙여넣은 라벨에서 전개 활동 수를 직접 읽는다 */
-  let n = 0;
+
+  /* 붙여넣은 라벨에서 활동 수와 단계 수를 직접 읽는다 */
+  let n = 0, s = 0;
   Object.keys(map).forEach(k => {
-    const m = k.match(/^전개(\d+)-/);
-    if(m) n = Math.max(n, parseInt(m[1],10));
+    const m = k.match(/^전개(\d+)-(?:(\d+)단계-)?/);
+    if(m){ n = Math.max(n, +m[1]); if(m[2]) s = Math.max(s, +m[2]); }
   });
   if(!n) n = devCount();
+  if(!s) s = 1;
 
   const doc = { a:{}, b:{ intro:{}, close:{}, develop:[] }, e:{ students:[], evaluation:[], reflection:[] }, d, tools };
-  for(let i=0;i<n;i++) doc.b.develop.push({});
+  for(let i=0;i<n;i++) doc.b.develop.push({ steps: [] });
 
-  slots(n).forEach(([label, path]) => {
+  slots(n, s).forEach(([label, path]) => {
     if(map[label] != null) setPath(doc, path, map[label]);
   });
 
-  doc.a.competency = [];   // 역량은 폼에서 고른 값을 쓰지 않으므로 비워 둔다
+  /* 이전 형식 라벨(전개1-교사, 전개1-가 …)도 받아 준다 */
+  doc.b.develop.forEach((x, i) => {
+    const k = i+1;
+    if(map[`전개${k}-교사`] != null) x.teacher = map[`전개${k}-교사`];
+    ['가','나','다'].forEach((lv, j) => {
+      const v = map[`전개${k}-${lv}`];
+      if(v != null) x[['levelA','levelB','levelC'][j]] = v;
+    });
+    x.steps = (x.steps || []).filter(Boolean);
+  });
+
+  /* API 경로와 같은 후처리: 자료 개수 제한, 단계 정리, 【활동n】 목록 채움 */
+  if(typeof window.__tidyPlan__ === 'function') window.__tidyPlan__(doc.b);
+
+  doc.a.competency = [];
 
   (d.studentPlans||[]).forEach(p => {
     doc.e.students.push({
@@ -178,8 +225,9 @@ function buildDoc(text){
     });
   });
 
-  const missing = slots(n).filter(([l]) => !map[l]).map(([l]) => l);
-  return { doc, missing, n };
+  const legacy = Object.keys(map).some(k => /^전개\d+-교사$/.test(k));
+  const missing = legacy ? [] : slots(n, s).filter(([l]) => !map[l]).map(([l]) => l);
+  return { doc, missing, n, s };
 }
 
 /* ── 화면 ──────────────────────────────────────────────── */
@@ -202,6 +250,7 @@ function openPanel(){
   let box = document.getElementById('pastePanel');
   if(box){ box.scrollIntoView({behavior:'smooth'}); return; }
 
+  const sel = 'margin-left:5px;padding:6px 8px;border:1.5px solid #d0dae8;border-radius:7px';
   const host = document.querySelector('.output') || document.body;
   box = document.createElement('div');
   box.id = 'pastePanel';
@@ -213,12 +262,13 @@ function openPanel(){
       ② 나온 결과를 <b>전체 복사</b> → 아래 칸에 붙여넣기 &nbsp;·&nbsp;
       ③ <b>한글파일 만들기</b><br>
       라벨 <code>[[ ]]</code> 은 지우지 마세요. 내용은 마음껏 고치셔도 됩니다.
+      <code>[AI]</code> 표시는 한글 파일에서 초록 도형으로 바뀝니다.
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
       <label style="align-self:center;font-size:12.5px;color:#556070">전개 활동
-        <select id="devCount" style="margin-left:5px;padding:6px 8px;border:1.5px solid #d0dae8;border-radius:7px">
-          <option>2</option><option>3</option><option>4</option>
-        </select> 개</label>
+        <select id="devCount" style="${sel}"><option>2</option><option>3</option><option>4</option></select> 개</label>
+      <label style="align-self:center;font-size:12.5px;color:#556070">활동당 단계
+        <select id="stepCount" style="${sel}"><option>2</option><option selected>3</option><option>4</option></select> 개</label>
       <button class="btn btn-secondary" id="btnCopyPastePrompt">📋 프롬프트 복사</button>
       <button class="btn" id="btnMakeHwpx"
         style="background:#5b4b8a;color:#fff;border:0;font-weight:800">⬇ 한글파일 만들기</button>
@@ -241,12 +291,12 @@ function openPanel(){
     const raw = document.getElementById('pasteArea').value.trim();
     if(!raw){ msg('붙여넣은 내용이 없습니다.'); return; }
     try{
-      const { doc, missing, n } = buildDoc(raw);
+      const { doc, missing, n, s } = buildDoc(raw);
       window.__DOC__ = doc;
-      if(typeof renderDoc === 'function'){ try{ renderDoc(doc); }catch(_){ } }
+      if(typeof window.__renderDoc__ === 'function'){ try{ window.__renderDoc__(doc); }catch(_){ } }
       if(typeof window.exportHwpx === 'function'){
         window.exportHwpx();
-        msg(`전개 활동 ${n}개로 변환했습니다.` + (missing.length ? ` 비어 있는 칸: ${missing.join(', ')}` : ''));
+        msg(`전개 활동 ${n}개, 활동당 ${s}단계로 변환했습니다.` + (missing.length ? ` 비어 있는 칸: ${missing.join(', ')}` : ''));
       } else {
         msg('hwpx.js 가 로드되지 않았습니다. 스크립트 순서를 확인해 주세요.');
       }
