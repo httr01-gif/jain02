@@ -1,6 +1,9 @@
 /* ═══════════════════════════════════════════════════════════
-   공개수업 지도안 프롬프트 생성기 v3.2 패치
+   공개수업 지도안 프롬프트 생성기 v3.3 패치
    ───────────────────────────────────────────────────────────
+   v3.3 변경  핵심역량 체크박스 탭 정렬, 학생별 지원과 자료 유형 2줄 이내,
+              학생 수행 줄마다 "- ", 유의점은 전개 활동당 1개 20자 이내,
+              표 머리 "본 차시 AI 활용 개별적 지원 방안", "생성형 AI 활용 자료 개발 유형"
    v3.2 변경  전개 구체화 — 활동마다 교수 단계 3개(제시·시범 → 수행 → 확인·피드백),
               단계마다 교사 활동 1행 + 가·나·다 수준별 수행 1행
    v3.1 변경
@@ -173,8 +176,8 @@ const PLAN_RULE = `
 
 자료·유의점 칸 규칙:
 - 자료는 ◉ 로 시작하는 명사형 20자 이내. AI로 만든 자료는 앞에 "AI 제작"을 붙인다. 예: "◉ AI 제작 대화 장면 카드"
-- 유의점은 ※ 로 시작하는 한 줄, 25자 이내, 명사형으로 끝낸다. 예: "※ 음량과 재생 속도 사전 점검"
-- 유의점은 이 활동에서 가장 중요한 한 가지만 쓴다. 안전 위험이 있으면 안전을, 없으면 개별 지원을 쓴다.`;
+- 유의점은 ※ 로 시작하는 한 줄, 20자 이내, 명사형으로 끝낸다. 예: "※ 음량 사전 점검"
+- 유의점은 전개 활동마다 1개만 쓴다. 안전 위험이 있으면 안전을, 없으면 개별 지원을 쓴다.`;
 
 /* ── 4. 3분할 프롬프트 ─────────────────────────────────── */
 const P1 = c => `${c}
@@ -201,7 +204,7 @@ close.teacher 규칙:
 - ▣ 3개를 이 순서로 쓴다. ▣ 정리 및 평가하기 / ▣ 차시 예고하기 / ▣ 인사하기
 - 각 ▣ 아래 " - " 세부 항목 1~2줄, 줄마다 30자 이내, "~하기"로 끝낸다.
 
-material 규칙: intro 는 ◉ 3개 이내와 ※ 1개, close 는 ◉ 2개 이내와 ※ 1개.
+material 규칙: intro 와 close 는 ◉ 2개 이내만 쓰고 유의점 ※ 은 쓰지 않는다.
 [AI] 는 도입에서 1개 이내, 정리에서는 AI 제작 자료를 실제로 쓸 때만 붙인다.
 process(학습 과정)는 줄바꿈 \\n 으로 구분한다.
 
@@ -219,7 +222,8 @@ const P2B = c => `${c}
   세부 항목에는 무엇을 어떻게 제시하는지, 교사 발문, 촉구나 피드백 방법이 구체적으로 드러나야 한다.
   발문은 큰따옴표로 쓴다. 모든 항목을 "~하기"로 끝낸다.
   AI 제작 자료를 제시하는 단계의 ▣ 제목 끝에 [AI] 를 붙인다. 두 활동 중 적어도 1개 활동에는 [AI] 가 있어야 한다.
-- steps[].levelA / levelB / levelC(학생의 활동): 바로 위 교사 단계에 대응하는 학생 수행 1~2줄, 줄마다 "- "로 시작, 칸당 30~60자, "~한다."로 끝낸다.
+- steps[].levelA / levelB / levelC(학생의 활동): 바로 위 교사 단계에 대응하는 학생 수행 1~2줄, 칸당 30~60자.
+  수행 하나를 한 줄로 쓰고 줄마다 "- "로 시작하며 "~한다."로 끝낸다.
   무엇을, 어떤 방식으로, 얼마나 하는지 관찰 가능하게 쓴다. 예: 개수, 횟수, 반응 방식.
   촉구 위계를 드러낸다. 가 "스스로", 나 "언어적 촉구를 받아", 다 "신체적 촉구를 받아" 또는 "그림 카드를 가리켜".
   교사 행동을 여기 쓰지 않는다.
@@ -230,9 +234,11 @@ const P2B = c => `${c}
 
 const P3 = c => `${c}
 
-(1) 학생별 "본 차시 개별적 지원 방안"과 "생성형 AI 활용 자료 유형"을 학생 특성·IEP 목표에 맞춰 각각 2~3줄("-"로 시작)로 작성.
+(1) 학생별 "본 차시 AI 활용 개별적 지원 방안"과 "생성형 AI 활용 자료 개발 유형"을 학생 특성·IEP 목표에 맞춰 작성.
+    support: AI로 제작한 자료로 이 학생을 어떻게 지원하는지 핵심만 1~2줄. 줄마다 "- "로 시작, 30자 이내, 명사형으로 끝낸다.
+    aiMaterial: 교사가 생성형 AI로 개발하는 자료 유형 1~2줄. 줄마다 "- "로 시작, 20자 이내 명사형. 예: "- 상황 그림 카드", "- 짧은 대화 영상"
     students 배열의 label 은 위 학생 정보의 라벨(A, B, C …)을 그대로 쓴다.
-    본문에 AI 도구 이름을 반복하지 말고 "AI로 제작한 ○○"처럼 쓴다.
+    AI 도구 이름은 쓰지 않는다.
 (2) 평가계획을 지식·이해 / 과정·기능 / 가치·태도 3영역으로 작성. high·mid·low 는 촉진 횟수나 수행 단계 수로 구분되는 관찰 가능한 문장.
 (3) 수업 나눔 질문 3개. 참관자가 협의회에서 논의할 만한 것으로.
 
@@ -242,6 +248,15 @@ const P3 = c => `${c}
 
 /* ── 4-1. 후처리 (v3.1) ───────────────────────────────── */
 /* 자료 칸: ◉·※ 개수 제한, 빈 줄 제거, 잘못 들어간 [AI] 제거 */
+const NOTE_MAX = 22;          // ※ 한 줄 글자 수 상한 (※ 제외, 공백 포함)
+function trimNote(s){
+  let t = s.replace(/^※\s*/, '').trim();
+  if(t.length > NOTE_MAX){
+    const cut = t.search(/[,，]|\s(?:및|또는)\s/);
+    t = (cut > 4 && cut <= NOTE_MAX) ? t.slice(0, cut) : t.slice(0, NOTE_MAX).replace(/\s+\S*$/, '');
+  }
+  return '※ ' + t.replace(/[.\s]+$/, '');
+}
 function limitMaterial(text, maxMat, maxNote){
   let m = 0, n = 0;
   return String(text || '').split('\n')
@@ -251,7 +266,31 @@ function limitMaterial(text, maxMat, maxNote){
       if(s.startsWith('◉')) return ++m <= maxMat;
       if(s.startsWith('※')) return ++n <= maxNote;
       return false;
-    }).join('\n');
+    })
+    .map(s => s.startsWith('※') ? trimNote(s) : s)
+    .join('\n');
+}
+/* 학생 수행 칸: 수행 하나를 한 줄로, 줄마다 "- " */
+function dashLines(text){
+  return String(text || '').split(AI_MARK).join('')
+    .split('\n')
+    .flatMap(s => s.split(/(?<=다\.)\s+/))
+    .map(s => s.replace(/^\s*[-–—·•]\s*/, '').trim())
+    .filter(Boolean)
+    .map(s => '- ' + s)
+    .join('\n');
+}
+/* 학생별 지원·자료 유형: 핵심 2줄 이내, 줄마다 "- " */
+function tidyStudents(list){
+  (list || []).forEach(x => {
+    ['support', 'aiMaterial'].forEach(k => {
+      x[k] = String(x[k] || '').split('\n')
+        .map(s => s.replace(/^\s*[-–—·•]\s*/, '').trim())
+        .filter(Boolean).slice(0, 2)
+        .map(s => '- ' + s).join('\n');
+    });
+  });
+  return list;
 }
 const noMark = s => String(s || '').split(AI_MARK).join('').trim();
 
@@ -272,8 +311,8 @@ function fillActList(intro, develop){
 
 function tidy(b){
   const io_ = b.intro || {}, cl = b.close || {};
-  io_.material = limitMaterial(io_.material, 3, 1);
-  cl.material  = limitMaterial(cl.material, 2, 1);
+  io_.material = limitMaterial(io_.material, 2, 0);
+  cl.material  = limitMaterial(cl.material, 2, 0);
   (b.develop || []).forEach(x => {
     x.material = limitMaterial(x.material, 3, 1);
     x.process = noMark(x.process);
@@ -284,7 +323,7 @@ function tidy(b){
     if(!x.steps.length) x.steps = [{}];
     x.steps.forEach(s => {
       s.teacher = String(s.teacher || '');
-      s.levelA = noMark(s.levelA); s.levelB = noMark(s.levelB); s.levelC = noMark(s.levelC);
+      s.levelA = dashLines(s.levelA); s.levelB = dashLines(s.levelB); s.levelC = dashLines(s.levelC);
     });
   });
   fillActList(io_, b.develop);
@@ -311,6 +350,7 @@ async function generateDocument(){
     say('2/4 · 도입과 정리를 구성하고 있습니다');      const b1 = await askJSON(P2A(c.text), '도입·정리');
     say('3/4 · 전개 활동을 구성하고 있습니다');        const b2 = await askJSON(P2B(c.text), '전개');
     say('4/4 · 개별지원과 평가계획을 작성하고 있습니다'); const e  = await askJSON(P3(c.text),  '개별지원·평가');
+    tidyStudents(e.students);
     const b = tidy({ intro: b1.intro, close: b1.close, develop: b2.develop || [] });
     DOC = { a, b, e, d: c.d, tools: c.tools };
     window.__DOC__ = DOC;
@@ -339,7 +379,7 @@ function renderDoc({a, b, e, d, tools}){
   const C22 = ["자기관리","지식정보처리","창의적 사고","심미적 감성","협력적 소통","공동체"];
   const pick = a.competency || [];
   const is22 = d.curriculumVersion !== '2015';
-  const box = (arr, on) => arr.map(x => (on && on.includes(x) ? "■ " : "□ ") + x + " 역량").join("　");
+  const box = (arr, on) => arr.map(x => `<span style="display:inline-block;width:33%">${(on && on.includes(x) ? "■ " : "□ ") + x} 역량</span>`).join("");
 
   const AITOOLS = ["ChatGPT","Claude","Gemini","Grok","Kling","기타"];
   const ETHICS = [
@@ -365,8 +405,8 @@ function renderDoc({a, b, e, d, tools}){
     `<colgroup><col width="13%"><col width="17%"><col width="70%"></colgroup>` +
     `<tr>${lbl('교육과정\n성취기준')}<td colspan="2" style="border:${B};padding:5px 6px">${escapeHtml((d.achCode? d.achCode+' ':'') + fieldText(d.achStd))}</td></tr>` +
     `<tr><td rowspan="2" style="border:${B};background:#f4f6f9;text-align:center;font-weight:700;vertical-align:middle">핵심역량</td>` +
-      `${lbl('2015 개정\n특수교육 교육과정')}${td(box(C15, is22?[]:pick),'font-size:11px')}</tr>` +
-    `<tr>${lbl('2022 개정\n특수교육 교육과정')}${td(box(C22, is22?pick:[]),'font-size:11px')}</tr>` +
+      `${lbl('2015 개정\n특수교육 교육과정')}<td style="border:${B};padding:5px 6px;font-size:11px">${box(C15, is22?[]:pick)}</td></tr>` +
+    `<tr>${lbl('2022 개정\n특수교육 교육과정')}<td style="border:${B};padding:5px 6px;font-size:11px">${box(C22, is22?pick:[])}</td></tr>` +
     `<tr>${lbl('수업설계 의도')}<td colspan="2" style="border:${B};padding:5px 6px;white-space:pre-wrap">${escapeHtml(a.intent||'')}</td></tr>`
   );
 
@@ -379,7 +419,7 @@ function renderDoc({a, b, e, d, tools}){
   h += tbl(
     `<colgroup><col width="8%"><col width="22%"><col width="22%"><col width="26%"><col width="22%"></colgroup>` +
     cap('대상 학생 특성 및 개별적 지원 계획', 5) +
-    `<tr>${th('학생')}${th('학생 특성')}${th('IEP 관련 목표')}${th('본 차시 개별적 지원 방안')}${th('생성형 AI 활용 자료 유형')}</tr>` + rows
+    `<tr>${th('학생')}${th('학생 특성')}${th('IEP 관련 목표')}${th('본 차시 AI 활용\n개별적 지원 방안')}${th('생성형 AI 활용\n자료 개발 유형')}</tr>` + rows
   );
 
   h += tbl(
@@ -455,6 +495,7 @@ async function copyToHwp(){
 window.generateDocument = generateDocument;
 window.copyToHwp = copyToHwp;
 window.__tidyPlan__ = tidy;
+window.__tidyStudents__ = tidyStudents;
 window.__renderDoc__ = d => { DOC = d; renderDoc(d); };   // 붙여넣기 경로 미리보기     // 붙여넣기 경로(paste.js)에서도 같은 후처리를 쓰도록 공개
 
 })();
