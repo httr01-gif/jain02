@@ -1,6 +1,7 @@
 /* ═══════════════════════════════════════════════════════════
-   HWPX 내려받기 모듈 (v3.2 패치 부속)
+   HWPX 내려받기 모듈 (v3.3 패치 부속)
    ───────────────────────────────────────────────────────────
+   v3.3 변경  핵심역량 체크박스 탭 정렬, 학생 지원 표 머리 문구 변경
    v3.2 변경  전개를 활동별 단계(교사 1행 + 가·나·다 1행) 반복 구조로 확장
    v3.1 변경  본문 [AI] 표기 → 초록 둥근 직사각형(생성형AI) 도형으로 변환
               도형은 서식 머리행의 범례 도형을 복제하므로 모양·색이 서식과 동일
@@ -14,6 +15,8 @@ const JSZIP_CDN    = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.
 const HP           = 'http://www.hancom.co.kr/hwpml/2011/paragraph';
 const AI_MARK      = '[AI]';
 const AI_COLOR     = '#9BE5C8';
+const HH           = 'http://www.hancom.co.kr/hwpml/2011/head';
+const TAB_POS      = [11000, 22500];   // 핵심역량 체크박스 2열·3열 시작 위치 (HWPUNIT, 셀 폭 약 33,800)
 
 const ORDER = ['mimetype','version.xml','Contents/header.xml','BinData/image1.png',
   'Contents/section0.xml','Preview/PrvText.txt','settings.xml','Preview/PrvImage.png',
@@ -149,6 +152,66 @@ function fitDevelopRows(tbl, ks){
   tbl.setAttribute('rowCnt', String(4 + body.length));
 }
 
+/* ── v3.3  핵심역량 체크박스 탭 정렬 ───────────────────
+   header.xml 에 탭 위치가 고정된 문단 모양을 하나 추가하고,
+   체크박스 칸의 \t 를 한글 탭으로 바꾼다 */
+function maxId(list){ let m = -1; list.forEach(x => m = Math.max(m, +x.getAttribute('id') || 0)); return m; }
+
+function addTabParaPr(hdoc, baseId){
+  const tps = hdoc.getElementsByTagNameNS(HH,'tabProperties')[0];
+  const pps = hdoc.getElementsByTagNameNS(HH,'paraProperties')[0];
+  if(!tps || !pps) return null;
+  const tabList  = Array.from(tps.getElementsByTagNameNS(HH,'tabPr'));
+  const paraList = Array.from(pps.getElementsByTagNameNS(HH,'paraPr')).filter(x => x.parentNode === pps);
+  const base = paraList.find(x => x.getAttribute('id') === String(baseId));
+  if(!base) return null;
+
+  const tabId = String(maxId(tabList) + 1);
+  const tp = hdoc.createElementNS(HH,'hh:tabPr');
+  tp.setAttribute('id', tabId); tp.setAttribute('autoTabLeft','0'); tp.setAttribute('autoTabRight','0');
+  TAB_POS.forEach(pos => {
+    const it = hdoc.createElementNS(HH,'hh:tabItem');
+    it.setAttribute('pos', String(pos)); it.setAttribute('type','LEFT'); it.setAttribute('leader','NONE');
+    tp.appendChild(it);
+  });
+  tps.appendChild(tp);
+  tps.setAttribute('itemCnt', String(tabList.length + 1));
+
+  const paraId = String(maxId(paraList) + 1);
+  const pp = base.cloneNode(true);
+  pp.setAttribute('id', paraId);
+  pp.setAttribute('tabPrIDRef', tabId);
+  const al = pp.getElementsByTagNameNS(HH,'align')[0];
+  if(al) al.setAttribute('horizontal','LEFT');      // 양쪽 정렬이면 탭 간격이 벌어지므로 왼쪽 정렬
+  pps.appendChild(pp);
+  pps.setAttribute('itemCnt', String(paraList.length + 1));
+  return paraId;
+}
+
+/* 셀 안 \t → <hp:tab/>, 문단 모양 교체 */
+function tabifyCell(tc, paraId){
+  if(!tc) return;
+  const doc = tc.ownerDocument;
+  Array.from(tc.getElementsByTagNameNS(HP,'p')).forEach(p => {
+    if(paraId) p.setAttribute('paraPrIDRef', paraId);
+    Array.from(p.getElementsByTagNameNS(HP,'t')).forEach(t => {
+      const s = t.textContent || '';
+      if(s.indexOf('\t') < 0) return;
+      while(t.firstChild) t.removeChild(t.firstChild);
+      s.split('\t').forEach((part, i) => {
+        if(i > 0){
+          const tab = doc.createElementNS(HP,'hp:tab');
+          tab.setAttribute('width','4000'); tab.setAttribute('leader','0'); tab.setAttribute('type','1');
+          t.appendChild(tab);
+        }
+        if(part) t.appendChild(doc.createTextNode(part));
+      });
+    });
+    const ls = Array.from(p.getElementsByTagNameNS(HP,'linesegarray')).find(x => x.parentNode === p);
+    if(ls) p.removeChild(ls);
+  });
+}
+
 /* ── v3.1  [AI] → 초록 둥근 직사각형 ─────────────────── */
 function findAiRect(doc){
   const rects = doc.getElementsByTagNameNS(HP,'rect');
@@ -207,16 +270,28 @@ async function exportHwpx(){
     if(!res.ok) throw new Error('템플릿 파일을 찾을 수 없습니다 — template.hwpx 를 HTML 과 같은 폴더에 두세요');
     const zip = await JSZipLib.loadAsync(await res.arrayBuffer());
 
-    const doc = makeDoc(await zip.file('Contents/section0.xml').async('string'));
+    const doc  = makeDoc(await zip.file('Contents/section0.xml').async('string'));
+    const hdoc = makeDoc(await zip.file('Contents/header.xml').async('string'));
     writeAll(doc, DOC);
+
+    /* 핵심역량 체크박스 탭 정렬 */
+    const T2 = tblsOf(doc)[2];
+    const c1 = cellAt(T2,1,2), c2 = cellAt(T2,2,2);
+    const p0 = c1 && c1.getElementsByTagNameNS(HP,'p')[0];
+    const tabPara = p0 ? addTabParaPr(hdoc, p0.getAttribute('paraPrIDRef')) : null;
+    tabifyCell(c1, tabPara); tabifyCell(c2, tabPara);
+
     const marks = applyAiMarks(doc);
 
-    const xml = new XMLSerializer().serializeToString(doc);
+    const xml  = new XMLSerializer().serializeToString(doc);
+    const hxml = new XMLSerializer().serializeToString(hdoc);
     const out = new JSZipLib();
     for(const name of ORDER){
       const f = zip.file(name);
       if(!f) continue;
-      const data = (name==='Contents/section0.xml') ? xml : await f.async('uint8array');
+      const data = (name==='Contents/section0.xml') ? xml
+                 : (name==='Contents/header.xml')   ? hxml
+                 : await f.async('uint8array');
       out.file(name, data, { compression: STORED.has(name) ? 'STORE' : 'DEFLATE' });
     }
     const blob = await out.generateAsync({ type:'blob', mimeType:'application/hwp+zip' });
@@ -262,12 +337,14 @@ function writeAll(doc, {a, b, e, d, tools}){
   const is22 = d.curriculumVersion !== '2015';
   const box = (arr,on) => {
     const m = arr.map(x => (on.includes(x) ? '■ ' : '□ ') + x + ' 역량');
-    return m.slice(0,3).join('   ') + '\n' + m.slice(3).join('   ');
+    return m.slice(0,3).join('\t') + '\n' + m.slice(3).join('\t');
   };
   S(2,1,2, box(C15, is22 ? [] : pick));
   S(2,2,2, box(C22, is22 ? pick : []));
   S(2,3,1, a.intent || '');
 
+  S(3,1,3, '본 차시 AI 활용\n개별적 지원 방안');
+  S(3,1,4, '생성형 AI 활용\n자료 개발 유형');
   const sup = {}; (e.students||[]).forEach(s => sup[s.label] = s);
   plans.forEach((p, i) => {
     const x = sup[p.label] || {};
